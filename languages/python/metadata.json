@@ -4,7 +4,7 @@
   "runtime": "Python 3.12 / unittest",
   "runner": "ubuntu-24.04",
   "runtime_probe": [
-    "python",
+    "{python}",
     "--version"
   ],
   "cases": [
@@ -16,7 +16,7 @@
       "native_runner": "unittest",
       "commands": [
         [
-          "python",
+          "{python}",
           "-m",
           "unittest",
           "discover",

@@ -6,6 +6,7 @@ import os
 import platform
 import re
 import subprocess
+import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from tempfile import NamedTemporaryFile, TemporaryDirectory
@@ -108,6 +109,8 @@ DIRECT_ASSERTIONS = {
 
 
 def executable(value):
+    if value == "{python}":
+        return "python"
     return PurePosixPath(value.replace("\\", "/")).name.lower().removesuffix(".exe")
 
 
@@ -297,6 +300,8 @@ def execute_case(case, folder, env, *, timeout=180, guard=None, command_results=
             if guard:
                 guard()
             command = [arg.replace("{tmp}", temp) for arg in argv]
+            if command[0] == "{python}":
+                command[0] = sys.executable
             command_env = env
             if index == native_index:
                 if native_runner == "unittest":
@@ -340,6 +345,8 @@ def execute_case(case, folder, env, *, timeout=180, guard=None, command_results=
 def runtime_version(probe, folder, env):
     if not probe:
         return None
+    if probe[0] == "{python}":
+        probe = [sys.executable, *probe[1:]]
     try:
         result = subprocess.run(
             probe, cwd=folder, env=env, timeout=20, capture_output=True,

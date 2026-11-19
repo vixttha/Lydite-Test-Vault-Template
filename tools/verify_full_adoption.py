@@ -60,6 +60,15 @@ def verify(output, work):
 
     checkout = commit(project, "Exercise the consumer implementation")
     check("pass", checkout, {"PYTHON-001": "PASS"}, 0)
+    if os.name != "nt":
+        tools = work / "python3-only"
+        tools.mkdir()
+        (tools / "python3").symlink_to(sys.executable)
+        git = shutil.which("git")
+        if git:
+            (tools / "git").symlink_to(git)
+        run(["python3", "tools/inventory.py", "--run", "python"], project, includes="PYTHON-001 | PASS",
+            env={**env, "PATH": str(tools)})
     check("pass", checkout, {"PYTHON-001": "PASS"}, 0)
 
     original_app = app.read_text(encoding="utf-8")
