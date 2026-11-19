@@ -43,7 +43,7 @@ The copied [v0.0.3 starter](../starter/test-vault/README.md) remains available f
 - **Named release candidate.** Manually run **Lydite validation** on the intended ref with a `vMAJOR.MINOR.PATCH` target. Preflight records an available or rejected verdict and the reason in a separate artifact. A published version, conflicting tag, invalid target or unavailable authoritative result blocks candidate evidence. The workflow checks release state again immediately before issuing a receipt.
 - **Evidence.** Successful aggregate receipts bind the checkout, tree and run attempt to downloaded and verified Linux, Windows, adoption and Graphify payloads. Early language failures retain a blocked lane record where the runner can publish it.
 
-Read `receipt.json` in the relevant artifact and match its checkout and tree to the review target. Routine runs supersede older routine runs on the same ref. A named run is grouped by ref and version, so repeating that pair supersedes the earlier run for that pair.
+Follow the [owner release review](release-review.md) for a publication decision. Read `receipt.json` in the relevant artifact and match its checkout and tree to the review target. Routine runs supersede older routine runs on the same ref. A named run is grouped by ref and version, so repeating that pair supersedes the earlier run for that pair.
 
 ## Check maintained documentation
 
