@@ -30,7 +30,7 @@ Use a receipt when a test suite can record a result for a catalog case. The cata
 }
 ```
 
-All fields in the examples are required. Use `null` for `evidence_sha256` when `shared_evidence` is false. Outcomes are `pass`, `fail`, `skip`, or `blocked`. The verifier reads the JSON files in the receipt directory. A missing, duplicate, undeclared, invalid, stale, or nonpassing receipt fails the case. Unknown JSON fields and duplicate JSON keys fail validation. The one combined table is also appended to the GitHub Actions job summary when available.
+All fields in the examples are required. Use `null` for `evidence_sha256` when `shared_evidence` is false. Outcomes are `pass`, `fail`, `skip`, or `blocked`. The verifier reads filenames ending in lowercase `.json` on every platform. Rename uppercase extensions such as `.JSON` before upgrading a copied verifier. A missing, duplicate, undeclared, invalid, stale, or nonpassing receipt fails the case. Unknown JSON fields and duplicate JSON keys fail validation. The one combined table is also appended to the GitHub Actions job summary when available.
 
 Each v2 suite hashes the exact manifest bytes it used. Write the plan before running any checks and reuse it unchanged for verification. Changing any manifest bytes, including the required check set, requires new v2 receipts. Observation digests remain separate from plan digests.
 

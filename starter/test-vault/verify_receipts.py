@@ -79,7 +79,7 @@ def verdict(directory, checks, expected):
     if directory.is_symlink() or not directory.is_dir():
         issues.append("Receipt directory is missing or invalid.")
     else:
-        entries = sorted(directory.glob("*.json"))
+        entries = sorted(path for path in directory.iterdir() if path.name.endswith(".json"))
         for path in entries:
             if path.is_symlink() or not path.is_file():
                 issues.append("Found an unreadable or invalid receipt.")

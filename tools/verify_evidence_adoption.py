@@ -44,7 +44,10 @@ def test_receipts(project, env, command, directory, observation):
         run(command, project, result=1, includes=detail, env=quiet_env)
         print(f"Rejected {name}.")
     python.unlink()
-    run(command, project, result=1, includes="MISSING", env=quiet_env)
+    uppercase = directory / "python.JSON"
+    uppercase.write_bytes(original[python])
+    run(command, project, result=1, includes="| python-check | MISSING |", env=quiet_env)
+    uppercase.unlink()
     python.write_bytes(original[python])
     duplicate = directory / "copy.json"
     duplicate.write_bytes(original[python])
