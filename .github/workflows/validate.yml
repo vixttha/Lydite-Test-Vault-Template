@@ -153,14 +153,20 @@ jobs:
         run: |
           python tools/graphify/version_maps.py "$RUNNER_TEMP/lydite-maps" --fetch-upstream --check |
             tee -a "$GITHUB_STEP_SUMMARY"
-      - name: Verify changed archive or graph bytes fail
+      - name: Verify changed archive modes and archive or graph bytes fail
         shell: bash
         run: |
           archive=versions/v0.0.3/test-vault/README.md
           map="Graphify HQ/v0.0.3/graph.json"
-          trap 'git restore -- "$archive" "$map"' EXIT
-          printf '\nSynthetic archive drift\n' >> "$archive"
+          trap 'git restore --source=HEAD --staged --worktree -- "$archive" "$map"' EXIT
+          git update-index --chmod=+x -- "$archive"
           log="$RUNNER_TEMP/lydite-map-drift.log"
+          if python tools/graphify/version_maps.py "$RUNNER_TEMP/lydite-bad-mode" --check > "$log" 2>&1; then
+            exit 1
+          fi
+          grep -F "archived Git mode differs for test-vault/README.md (expected 100644, found 100755)" "$log"
+          git restore --source=HEAD --staged --worktree -- "$archive"
+          printf '\nSynthetic archive drift\n' >> "$archive"
           if python tools/graphify/version_maps.py "$RUNNER_TEMP/lydite-bad-archive" --check > "$log" 2>&1; then
             exit 1
           fi
