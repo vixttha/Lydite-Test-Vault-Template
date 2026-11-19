@@ -46,6 +46,15 @@ jobs:
           python tools/verify_adoption.py --fixture go-api
           python tools/verify_adoption.py --fixture docs-only
           python tools/verify_evidence_adoption.py
+          python tools/verify_full_adoption.py --evidence-dir "$RUNNER_TEMP/lydite-adoption"
+      - name: Upload disposable install evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: lydite-adoption-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/lydite-adoption/
+          if-no-files-found: error
+          retention-days: 7
 
   examples:
     name: Language examples (${{ matrix.runner }})

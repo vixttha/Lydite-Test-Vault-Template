@@ -1,5 +1,11 @@
 # Using Lydite
 
+## Install the complete Vault
+
+From a Lydite Git checkout, use the [starter install](../starter/test-vault/README.md#install-in-an-existing-repository) to add the catalog and workflow. Also copy `tools/inventory.py`, `tools/native_outcomes.py`, and each desired `languages/<language-folder>/` directory to the same paths in the target repository. Review collisions in an existing project. Use the runtimes listed in the selected manifests. The inventory reads the language folders beside its parent `tools/` directory.
+
+From the target repository root, run `python tools/inventory.py` to check the declarations. Run `python tools/inventory.py --run python` for the Python example if installed. Replace the sample with a test of the real project entry point and register that test in the manifest. Add the same command to the target's CI once the runtime is set up. The copied catalog workflow checks the catalog; the language execution command runs the selected tests.
+
 ## Pick one behavior
 
 Choose the language or runtime that controls the behavior. A second language can provide independent evidence when it reads the same observation through a different implementation or checks a real client boundary.
