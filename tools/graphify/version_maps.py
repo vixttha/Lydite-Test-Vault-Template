@@ -14,6 +14,7 @@ import sys
 import tokenize
 from importlib.metadata import version
 from pathlib import Path, PurePosixPath
+from tempfile import TemporaryDirectory
 from urllib.parse import unquote, urlsplit
 
 from graphify.build import build_from_json
@@ -234,6 +235,39 @@ def compare(output, export_missing):
     return bool(extra or changed or missing)
 
 
+def rebuild(output, manifest, fetch_upstream):
+    versions = manifest["versions"]
+    sorted_versions = sorted(versions, key=lambda tag: tuple(map(int, tag[1:].split("."))), reverse=True)
+    receipts = {}
+    for tag in sorted_versions:
+        record = versions[tag]
+        if fetch_upstream:
+            fetch_source(record["source_commit"])
+        sources = read_archive(tag, record)
+        receipt = build_map(tag, record, sources, output / tag)
+        asyncio.run(verify(output / tag, receipt))
+        receipts[tag] = receipt
+        print(f"{tag}: Graphify MCP verified {len(sources)} archived files, {receipt['nodes']} nodes, "
+              f"{receipt['edges']} edges, SHA-256 {receipt['graph_sha256']}")
+    index = ["# Graphify HQ", "", "Maps for the [archived Test Vault templates](../versions/README.md).", "",
+             f"Current archived version is **{manifest['current']}**.", ""]
+    index.extend(f"- [{tag}]({tag}/README.md)" for tag in sorted_versions)
+    (output / "README.md").write_text("\n".join(index) + "\n", encoding="utf-8")
+    return receipts
+
+
+def publish_batch(output, manifest, fetch_upstream):
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with TemporaryDirectory(prefix=".lydite-archive-", dir=output.parent) as directory:
+        stage = Path(directory) / "verified"
+        stage.mkdir()
+        receipts = rebuild(stage, manifest, fetch_upstream)
+        if output.exists():
+            output.rmdir()
+        stage.rename(output)
+    return receipts
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path)
@@ -252,20 +286,7 @@ def main():
         raise ValueError("Version manifest and archive folders do not match")
     scope = "public upstream" if args.fetch_upstream else "local Git objects only"
     print(f"Archive source verification: {scope}.")
-    sorted_versions = sorted(versions, key=lambda tag: tuple(map(int, tag[1:].split("."))), reverse=True)
-    for tag in sorted_versions:
-        record = versions[tag]
-        if args.fetch_upstream:
-            fetch_source(record["source_commit"])
-        sources = read_archive(tag, record)
-        receipt = build_map(tag, record, sources, output / tag)
-        asyncio.run(verify(output / tag, receipt))
-        print(f"{tag}: Graphify MCP verified {len(sources)} archived files, {receipt['nodes']} nodes, "
-              f"{receipt['edges']} edges, SHA-256 {receipt['graph_sha256']}")
-    index = ["# Graphify HQ", "", "Maps for the [archived Test Vault templates](../versions/README.md).", "",
-             f"Current archived version is **{manifest['current']}**.", ""]
-    index.extend(f"- [{tag}]({tag}/README.md)" for tag in sorted_versions)
-    (output / "README.md").write_text("\n".join(index) + "\n", encoding="utf-8")
+    publish_batch(output, manifest, args.fetch_upstream)
     if args.check and compare(output, args.export_missing):
         sys.exit("Commit the matching Graphify HQ map, outline, and receipt for every archived version")
     if args.check:
