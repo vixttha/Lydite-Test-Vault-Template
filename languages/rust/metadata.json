@@ -3,7 +3,10 @@
   "language": "Rust",
   "runtime": "Rust / stable rustc test harness",
   "runner": "ubuntu-24.04",
-  "runtime_probe": ["rustc", "--version"],
+  "runtime_probe": [
+    "rustc",
+    "--version"
+  ],
   "cases": [
     {
       "id": "RUST-001",
@@ -22,7 +25,8 @@
         [
           "{tmp}/rust-contract"
         ]
-      ]
+      ],
+      "native_test": "rejects_truncated_payload"
     }
   ]
 }

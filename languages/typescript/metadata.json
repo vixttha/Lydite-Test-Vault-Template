@@ -3,7 +3,10 @@
   "language": "TypeScript",
   "runtime": "Node.js 24 / node:test with type stripping",
   "runner": "ubuntu-24.04",
-  "runtime_probe": ["node", "--version"],
+  "runtime_probe": [
+    "node",
+    "--version"
+  ],
   "cases": [
     {
       "id": "TYPESCRIPT-001",
@@ -18,7 +21,8 @@
           "--test-reporter=tap",
           "tests/contract.test.mts"
         ]
-      ]
+      ],
+      "native_test": "unknown counts follow the runtime contract"
     }
   ]
 }

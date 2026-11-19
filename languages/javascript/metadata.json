@@ -3,7 +3,10 @@
   "language": "JavaScript",
   "runtime": "Node.js 24 / node:test",
   "runner": "ubuntu-24.04",
-  "runtime_probe": ["node", "--version"],
+  "runtime_probe": [
+    "node",
+    "--version"
+  ],
   "cases": [
     {
       "id": "JAVASCRIPT-001",
@@ -18,7 +21,8 @@
           "--test-reporter=tap",
           "tests/contract.test.mjs"
         ]
-      ]
+      ],
+      "native_test": "JSON round trip preserves a Unicode label and numeric count"
     }
   ]
 }

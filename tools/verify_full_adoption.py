@@ -65,16 +65,20 @@ def verify(output, work):
     metadata = language / "metadata.json"
     manifest = json.loads(metadata.read_text(encoding="utf-8"))
     fixture = manifest["cases"][0]["test"]
+    independent = language / "tests/independent.py"
+    independent.write_text("assert 6 * 7 == 42\n", encoding="utf-8")
+    missing_python = work / "unavailable-runtime" / "python"
     manifest["cases"].extend([
         {"id": "PYTHON-002", "purpose": "Report a missing executable", "test": fixture,
-         "support": [], "commands": [["lydite-fixture-executable-that-does-not-exist"]]},
-        {"id": "PYTHON-003", "purpose": "Continue after an independent case fails", "test": fixture,
-         "support": [], "commands": [[sys.executable, "-c", "assert 6 * 7 == 42"]]},
+         "support": [], "commands": [[str(missing_python), fixture]]},
+        {"id": "PYTHON-003", "purpose": "Continue after an independent case fails", "test": "tests/independent.py",
+         "support": [], "commands": [["python", "tests/independent.py"]]},
     ])
     metadata.write_text(json.dumps(manifest), encoding="utf-8")
     check("fail", commit(project, "Exercise a controlled regression and missing prerequisite"),
           {"PYTHON-001": "FAIL", "PYTHON-002": "BLOCKED", "PYTHON-003": "PASS"}, 1)
 
+    independent.unlink()
     manifest["cases"] = manifest["cases"][:1]
     metadata.write_text(json.dumps(manifest), encoding="utf-8")
     app.write_text(original_app, encoding="utf-8")

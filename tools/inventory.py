@@ -6,10 +6,11 @@ import os
 import platform
 import re
 import subprocess
+import xml.etree.ElementTree as ET
 from pathlib import Path, PurePosixPath
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 
-from native_outcomes import NATIVE_RUNNERS, passed_tests, skipped_tests, unittest_command
+from native_outcomes import NATIVE_RUNNERS, passed_tests, selected_outcome, skipped_tests, unittest_command
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -69,6 +70,77 @@ def argument_list(value):
     )
 
 
+DIRECT_ASSERTIONS = {
+    "bash": ("bash",), "fsi": ("dotnet", "fsi", "--exec"),
+    "haskell": ("runghc",), "java": ("java",),
+    "lua": ("lua5.4",), "powershell": ("pwsh", "-NoProfile", "-File"),
+    "python": ("python",), "ruby": ("ruby",),
+}
+
+
+def executable(value):
+    return PurePosixPath(value.replace("\\", "/")).name.lower().removesuffix(".exe")
+
+
+def test_invocation(folder, case):
+    """Bind a native stage or standalone assertion to the declared primary file."""
+    commands = case["commands"]
+    test = case["test"]
+    runner = case.get("native_runner")
+    stage = case.get("native_command_index", case.get("assertion_command_index", len(commands) - 1))
+    command = commands[stage]
+    program = executable(command[0])
+    if runner == "unittest":
+        return re.fullmatch(r"python(?:[0-9.]*)?", program) and unittest_command(command) != command
+    if runner in {"node-tap", "go-json"}:
+        secondary, required, allowed = ("--test", "--test-reporter=tap",
+            r"--test-reporter=tap|--test-name-pattern=.+") if runner == "node-tap" else (
+                "test", "-json", r"-json|-count=[0-9]+|-run=.+|-v")
+        return bool(
+            program == ("node" if runner == "node-tap" else "go")
+            and command[1:2] == [secondary]
+            and required in command[2:-1]
+            and PurePosixPath(command[-1]).as_posix() == test
+            and all(re.fullmatch(allowed, arg) for arg in command[2:-1])
+        )
+    if not runner:
+        for prefix in DIRECT_ASSERTIONS.values():
+            if ([program, *command[1:len(prefix)]] == list(prefix)
+                    and len(command) > len(prefix) and PurePosixPath(command[len(prefix)]).as_posix() == test):
+                return True
+    if runner not in (None, "rust-libtest"):
+        return False
+    for build in commands[max(0, stage - 1):stage]:
+        compiler = executable(build[0])
+        if compiler == ("rustc" if runner else "g++") and len(build) >= 4:
+            flags, source, option, artifact = build[1:-3], *build[-3:]
+            valid_flags = flags == ["--test"] if runner else all(
+                re.fullmatch(r"(?:-std=c\+\+[0-9]+|-W[a-zA-Z]+)", value) for value in flags
+            )
+            if (valid_flags and PurePosixPath(source).as_posix() == test and option == "-o"
+                    and re.fullmatch(r"\{tmp\}/[a-zA-Z0-9._-]+", artifact) and command[0] == artifact):
+                return True
+        if not runner and compiler == "dotnet" and build[1:2] == ["build"] and len(build) == 6:
+            _, _, project, flag, artifacts, intermediate = build
+            project_path = PurePosixPath(project)
+            if (project not in case["support"] or project_path.suffix != ".csproj" or flag != "--output"
+                    or not re.fullmatch(r"\{tmp\}/[a-zA-Z0-9._-]+", artifacts)
+                    or intermediate != "-p:BaseIntermediateOutputPath={tmp}/obj/"
+                    or command[:2] != ["dotnet", f"{artifacts}/{project_path.stem}.dll"]):
+                continue
+            expected_source = str(PurePosixPath(test).relative_to(project_path.parent)) if (
+                PurePosixPath(test).is_relative_to(project_path.parent)) else None
+            try:
+                spec = ET.parse(folder / project).getroot()
+            except ET.ParseError as error:
+                raise ValueError(f"{case['id']}: invalid test project") from error
+            if (spec.attrib == {"Sdk": "Microsoft.NET.Sdk"} and expected_source
+                    and spec.findtext("PropertyGroup/EnableDefaultCompileItems") == "false"
+                    and [item.attrib for item in spec.findall("ItemGroup/Compile")] == [{"Include": expected_source}]):
+                return True
+    return False
+
+
 def read_manifest(folder, seen):
     manifest = json.loads((folder / "metadata.json").read_text(encoding="utf-8"), object_pairs_hook=unique_object)
     required_fields(manifest, {"schema_version", "language", "runtime", "runner", "cases"}, {"runtime_probe"}, "manifest")
@@ -89,7 +161,7 @@ def read_manifest(folder, seen):
         raise ValueError("cases: expected at least one declared case")
     for index, case in enumerate(cases, 1):
         label = f"case {index}"
-        required_fields(case, {"id", "purpose", "test", "support", "commands"}, {"native_runner", "native_command_index"}, label)
+        required_fields(case, {"id", "purpose", "test", "support", "commands"}, {"native_runner", "native_command_index", "native_test", "assertion_command_index"}, label)
         case_id = case["id"]
         if not nonblank(case_id) or not CASE_ID.fullmatch(case_id) or case_id in seen:
             raise ValueError(f"{label}: invalid or duplicate case {case_id}")
@@ -107,12 +179,20 @@ def read_manifest(folder, seen):
             native = case["native_runner"]
             if not nonblank(native) or native not in NATIVE_RUNNERS:
                 raise ValueError(f"{case_id}: unknown native_runner {native!r}")
-        if "native_command_index" in case:
-            native_index = case["native_command_index"]
-            if "native_runner" not in case or type(native_index) is not int or not 0 <= native_index < len(commands):
-                raise ValueError(f"{case_id}: native_command_index requires a native runner and a valid zero-based command index")
+        if "native_runner" in case and not nonblank(case.get("native_test")):
+            raise ValueError(f"{case_id}: native_runner requires a named native_test")
+        if "native_test" in case and "native_runner" not in case:
+            raise ValueError(f"{case_id}: native_test requires a native_runner")
+        for field, requires_native in (("native_command_index", True), ("assertion_command_index", False)):
+            if field in case:
+                stage = case[field]
+                if ("native_runner" in case) != requires_native or type(stage) is not int or not 0 <= stage < len(commands):
+                    raise ValueError(f"{case_id}: invalid {field} for this runner or command list")
         seen.add(case_id)
     check_files(folder, cases)
+    for case in cases:
+        if not test_invocation(folder, case):
+            raise ValueError(f"{case['id']}: command stages do not bind to declared test {case['test']}")
     return manifest
 
 
@@ -187,11 +267,18 @@ def execute_case(case, folder, env, *, timeout=180, guard=None, command_results=
                 native_output = output
     if native := case.get("native_runner"):
         try:
+            if name := case.get("native_test"):
+                outcome = selected_outcome(native, native_output, name, Path(folder) / case["test"])
+                if outcome == "pass":
+                    return "PASS", f"declared native test passed: {name}"
+                if outcome == "skip":
+                    return "SKIP", f"declared native test skipped: {name}"
+                return "FAIL", f"declared native test did not report a unique pass: {name}"
             if not passed_tests(native, native_output):
                 if skipped_tests(native, native_output):
                     return "SKIP", f"{native} reported skipped tests and no passes"
                 return "FAIL", f"{native} reported no passing tests"
-        except (ValueError, AttributeError):
+        except (ValueError, AttributeError, KeyError, TypeError):
             return "FAIL", f"{native} reported an invalid result"
     return "PASS", "case passed"
 
@@ -323,6 +410,7 @@ def run_cases(inventory, languages, evidence=None):
                 "case_id": case["id"], "language": slug, "test": case["test"],
                 "declared_runner": manifest["runner"], "declared_runtime": manifest["runtime"],
                 "observed_runtime": runtime, "commands": case["commands"], "command_results": command_results,
+                "native_test": case.get("native_test"),
                 "outcome": status, "detail": reason,
             })
     if drifted:

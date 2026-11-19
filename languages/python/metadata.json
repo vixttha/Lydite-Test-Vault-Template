@@ -3,7 +3,10 @@
   "language": "Python",
   "runtime": "Python 3.12 / unittest",
   "runner": "ubuntu-24.04",
-  "runtime_probe": ["python", "--version"],
+  "runtime_probe": [
+    "python",
+    "--version"
+  ],
   "cases": [
     {
       "id": "PYTHON-001",
@@ -21,7 +24,8 @@
           "tests",
           "-v"
         ]
-      ]
+      ],
+      "native_test": "DebitContract.test_rejected_debit_preserves_balance"
     }
   ]
 }

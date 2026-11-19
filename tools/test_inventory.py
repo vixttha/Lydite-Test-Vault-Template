@@ -84,7 +84,7 @@ class InventoryTests(unittest.TestCase):
         base = manifest["cases"][0]
         manifest["cases"] += [
             {**base, "id": "CHECK-002", "test": "tests/./check.py", "support": ["tests/./fixture.txt"]},
-            {**base, "id": "CHECK-003", "test": "tests/second.py"},
+            {**base, "id": "CHECK-003", "test": "tests/second.py", "commands": [["python", "tests/second.py"]]},
         ]
         path.write_text(json.dumps(manifest), encoding="utf-8")
         output = io.StringIO()
@@ -162,6 +162,30 @@ class NativeOutcomeTests(unittest.TestCase):
                 with self.subTest(wanted=wanted), redirect_stdout(io.StringIO()):
                     test.write_text(source + content, encoding="utf-8")
                     self.assertEqual(execute_case(case, directory, os.environ)[0], wanted)
+
+    def test_named_unittest_must_run_from_the_declared_file(self):
+        with TemporaryDirectory() as directory, redirect_stdout(io.StringIO()):
+            folder = Path(directory)
+            tests = folder / "tests"
+            tests.mkdir()
+            fixture = (
+                "import unittest\nclass Fixture(unittest.TestCase):\n"
+                "    def test_expected(self): self.assertTrue(True)\n"
+                "    def test_other(self): self.assertTrue(True)\n"
+            )
+            for name in ("primary", "unrelated"):
+                (tests / f"{name}.py").write_text(fixture, encoding="utf-8")
+            command = [sys.executable, "-m", "unittest", "discover", "-s", "tests"]
+            case = {"test": "tests/primary.py", "native_runner": "unittest",
+                    "native_test": "Fixture.test_expected"}
+            for selector, method, wanted in (
+                ("unrelated.py", "test_expected", "FAIL"),
+                ("primary.py", "test_other", "FAIL"),
+                ("primary.py", "test_expected", "PASS"),
+            ):
+                with self.subTest(selector=selector, method=method):
+                    candidate = {**case, "commands": [[*command, "-p", selector, "-k", method]]}
+                    self.assertEqual(execute_case(candidate, folder, os.environ)[0], wanted)
 
 
 class CommandOutcomeTests(unittest.TestCase):
