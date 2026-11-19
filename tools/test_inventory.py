@@ -501,6 +501,15 @@ class CheckoutIdentityTests(unittest.TestCase):
             self.assertFalse((language / "next-case-marker").exists())
 
 
+    def test_report_rejects_new_files_inside_input_paths(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch("inventory.ROOT", root), patch("inventory.execute_case") as execute:
+                for path in (root / "languages" / "new.json", root / "tools" / "new.json"):
+                    with self.assertRaisesRegex(ValueError, "inside project inputs"):
+                        run_cases({}, [], path)
+                execute.assert_not_called()
+
     def test_report_rejects_tracked_destinations_before_running_cases(self):
         with TemporaryDirectory() as directory:
             root = Path(directory)

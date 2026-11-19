@@ -373,7 +373,7 @@ def report_destination(path):
     destination = path.resolve()
     inputs = ((ROOT / name).resolve() for name in ("languages", "tools"))
     if destination.is_relative_to((ROOT / ".git").resolve()) or (
-        destination.exists() and any(destination.is_relative_to(prefix) for prefix in inputs)
+        any(destination.is_relative_to(prefix) for prefix in inputs)
     ):
         raise ValueError("evidence destination points inside project inputs")
     try:
