@@ -9,10 +9,16 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 from tempfile import TemporaryDirectory
+from urllib.error import HTTPError
 
-from inventory import checkout_identity, execute_case, print_inventory, read_inventory, report_destination, run_cases, runtime_version
+from archive_manifest import load_manifest
+from inventory import check_windows_paths, checkout_identity, execute_case, print_inventory, read_inventory, report_destination, run_cases, runtime_version
 from native_outcomes import passed_tests
-from release_record import SUPPORTING_JOBS, supporting_evidence
+from validation_contract import lane_failure, validate_inventory
+from release_record import (
+    CandidateRejected, SUPPORTING_JOBS, fetch_support, github_resource, main as record_release, receipt_context,
+    run_preflight, supporting_evidence, verify_candidate_target,
+)
 
 
 class InventoryTests(unittest.TestCase):
@@ -47,6 +53,34 @@ class InventoryTests(unittest.TestCase):
     def test_valid_manifest_and_fixture_are_reported(self):
         self.add_language("one", "CHECK-001")
         self.assertEqual(set(read_inventory(self.root)), {"one"})
+
+    def test_language_root_cannot_redirect_outside_inventory(self):
+        test = self.add_language("one", "CHECK-001")
+        folder = test.parent.parent
+        with TemporaryDirectory() as target:
+            external = Path(target) / "external"
+            shutil.move(folder, external)
+            try:
+                folder.symlink_to(external, target_is_directory=True)
+            except (OSError, NotImplementedError) as error:
+                self.skipTest(f"host cannot create a directory link: {error}")
+            with self.assertRaisesRegex(ValueError, "language root must stay inside"):
+                read_inventory(self.root)
+
+    def test_upstream_coverage_checks_all_declared_tracks(self):
+        inventory = read_inventory(Path(__file__).resolve().parents[1] / "languages")
+        validate_inventory(inventory)
+        inventory.pop("ruby")
+        with self.assertRaisesRegex(ValueError, "ubuntu-24.04/ruby"):
+            validate_inventory(inventory)
+
+    def test_setup_failure_records_unstarted_runner_cases(self):
+        record = lane_failure("windows-latest", "setup", {
+            "GITHUB_SHA": "a" * 40, "GITHUB_RUN_ID": "11", "GITHUB_RUN_ATTEMPT": "2",
+        })
+        self.assertEqual(record["failed_stage"], "setup")
+        self.assertEqual(record["attempt"], "2")
+        self.assertEqual(record["cases"], [{"case_id": "POWERSHELL-001", "outcome": "NOT_RUN"}])
 
     def test_deleted_or_unlisted_files_fail_validation(self):
         test = self.add_language("one", "CHECK-001")
@@ -108,6 +142,22 @@ class InventoryTests(unittest.TestCase):
             self.skipTest(f"host cannot create directory links: {error}")
         with self.assertRaisesRegex(ValueError, "real directory inside the language folder"):
             read_inventory(self.root)
+
+    def test_windows_paths_reject_invalid_names_and_case_collisions(self):
+        for paths in (["tests/a:b.py"], ["tests/CON.txt"], ["tests/a.py", "tests/A.py"],
+                      ["tests/Sub/a.py", "tests/sub/b.py"]):
+            with self.subTest(paths=paths), self.assertRaisesRegex(ValueError, "Windows .*fixture"):
+                check_windows_paths(self.root, paths)
+        check_windows_paths(self.root, ["tests/ok.py", "tests/sub/also-ok.py"])
+
+    def test_inventory_table_escapes_pipes_and_collapses_newlines(self):
+        self.add_language("one", "CHECK-001")
+        manifests = read_inventory(self.root)
+        manifests["one"].update(language="Python | CPython", runtime="Python 3.12\nRunner")
+        output = io.StringIO()
+        with redirect_stdout(output):
+            print_inventory(manifests)
+        self.assertIn(r"| Python \| CPython | Python 3.12 Runner | 1 | 1 | ubuntu-24.04 |", output.getvalue())
 
     def test_case_paths_are_normalized_before_counting(self):
         test = self.add_language("one", "CHECK-001")
@@ -173,6 +223,134 @@ class NativeOutcomeTests(unittest.TestCase):
                             "commands": [["node", "--test", "--test-reporter=tap", str(test)]]}
                     self.assertEqual(execute_case(case, directory, os.environ)[0], wanted)
 
+    @unittest.skipUnless(shutil.which("node"), "Node is needed for TAP regression checks")
+    def test_named_node_tests_decode_tap_escapes_without_hiding_directives(self):
+        with TemporaryDirectory() as directory:
+            test = Path(directory) / "fixture.test.mjs"
+            for name, options, outcome in (
+                ("fixes issue #42", "{}", "PASS"),
+                ("includes # SKIP in the title", "{}", "PASS"),
+                ("path uses \\ and #", "{}", "PASS"),
+                ("skips a path ending in \\", "{skip: true}", "SKIP"),
+                ("todo #42", "{todo: true}", "FAIL"),
+            ):
+                with self.subTest(name=name), redirect_stdout(io.StringIO()):
+                    test.write_text(
+                        "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\n"
+                        f"test({json.dumps(name)}, {options}, () => assert.equal(2 + 2, 4));\n"
+                        "test('unrelated', () => assert.equal(3 + 4, 7));\n",
+                        encoding="utf-8",
+                    )
+                    case = {"native_runner": "node-tap", "native_test": name, "test": test.name,
+                            "commands": [["node", "--test", "--test-reporter=tap", str(test)]]}
+                    self.assertEqual(execute_case(case, directory, os.environ)[0], outcome)
+                    self.assertEqual(
+                        execute_case({**case, "native_test": "missing"}, directory, os.environ)[0], "FAIL"
+                    )
+
+    @unittest.skipUnless(shutil.which("node"), "Node is needed for named test regression checks")
+    def test_node_native_names_distinguish_newlines_and_literal_backslashes(self):
+        with TemporaryDirectory() as directory, redirect_stdout(io.StringIO()):
+            test = Path(directory) / "fixture.test.mjs"
+            actual, different = "line\nbreak", r"line\nbreak"
+            test.write_text(f"import {{test}} from 'node:test';\ntest({json.dumps(actual)}, () => {{}});\n")
+            case = {"native_runner": "node-tap", "test": test.name,
+                    "commands": [["node", "--test", "--test-reporter=tap", str(test)]]}
+            self.assertEqual(execute_case({**case, "native_test": actual}, directory, os.environ)[0], "PASS")
+            self.assertEqual(execute_case({**case, "native_test": different}, directory, os.environ)[0], "FAIL")
+
+    @unittest.skipUnless(shutil.which("node"), "Node is needed for named test regression checks")
+    def test_node_native_names_preserve_whitespace(self):
+        with TemporaryDirectory() as directory, redirect_stdout(io.StringIO()):
+            test = Path(directory) / "fixture.test.mjs"
+            test.write_text("import {test} from 'node:test';\ntest(' name ', () => {});\n")
+            case = {"native_runner": "node-tap", "test": test.name,
+                    "commands": [["node", "--test", "--test-reporter=tap", str(test)]]}
+            self.assertEqual(execute_case({**case, "native_test": " name "}, directory, os.environ)[0], "PASS")
+            self.assertEqual(execute_case({**case, "native_test": "name"}, directory, os.environ)[0], "FAIL")
+
+    @unittest.skipUnless(shutil.which("node"), "Node is needed for nested test regression checks")
+    def test_node_native_paths_distinguish_identical_leaf_names(self):
+        with TemporaryDirectory() as directory, redirect_stdout(io.StringIO()):
+            test = Path(directory) / "fixture.test.mjs"
+            test.write_text(
+                "import {describe, it} from 'node:test';\n"
+                "describe('outer', () => describe('inner', () => it('leaf', () => {})));\n"
+                "describe('other', () => it('leaf', {skip:true}, () => {}));\n"
+            )
+            case = {"native_runner": "node-tap", "test": test.name,
+                    "commands": [["node", "--test", "--test-reporter=tap", str(test)]]}
+            for name, expected in ((["outer", "inner", "leaf"], "PASS"),
+                                   (["other", "leaf"], "SKIP"), ("leaf", "FAIL")):
+                with self.subTest(name=name):
+                    self.assertEqual(execute_case({**case, "native_test": name}, directory, os.environ)[0], expected)
+
+    @unittest.skipUnless(shutil.which("node"), "Node is needed for the manifest CLI fixture")
+    def test_node_manifest_cli_preserves_whitespace_only_selectors(self):
+        source = Path(__file__).resolve().parents[1]
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            language = root / "languages/javascript"
+            shutil.copytree(source / "languages/javascript", language)
+            (root / "tools").mkdir()
+            for name in ("inventory.py", "native_outcomes.py", "node_outcomes.mjs"):
+                shutil.copy2(source / "tools" / name, root / "tools" / name)
+            meta = language / "metadata.json"
+            manifest = json.loads(meta.read_text(encoding="utf-8"))
+            case = manifest["cases"][0]
+            fixture = language / case["test"]
+            cli = [sys.executable, "tools/inventory.py", "--run", "javascript"]
+            for test, selector, expected in (
+                ("test('   ', () => {});", "   ", "PASS"),
+                ("test('   ', () => {});", "  ", "FAIL"),
+                ("describe('  ', () => test('   ', () => {}));", ["  ", "   "], "PASS"),
+                ("describe('  ', () => test('   ', () => {}));", [" ", "   "], "FAIL"),
+                ("test('   ', () => {});", "", "invalid"),
+                ("test('   ', () => {});", ["", "   "], "invalid"),
+                ("test('   ', () => {});", [123, "   "], "invalid"),
+            ):
+                with self.subTest(selector=selector):
+                    fixture.write_text("import {test, describe} from 'node:test';\n" + test + "\n",
+                                       encoding="utf-8")
+                    case["native_test"] = selector
+                    meta.write_text(json.dumps(manifest), encoding="utf-8")
+                    result = subprocess.run(cli, cwd=root, capture_output=True, text=True, timeout=20,
+                                            env={**os.environ, "GITHUB_ACTIONS": "false"})
+                    self.assertEqual(result.returncode, 0 if expected == "PASS" else 1)
+                    if expected == "invalid":
+                        self.assertIn("requires a named native_test", result.stderr)
+                    else:
+                        self.assertIn(f"{case['id']} | {expected} |", result.stdout)
+
+    def test_unittest_wrapper_preserves_isolated_imports(self):
+        with TemporaryDirectory() as directory, redirect_stdout(io.StringIO()):
+            test = Path(directory) / "isolated_fixture.py"
+            test.write_text("import unittest\nclass TestCase(unittest.TestCase):\n    def test_one(self): pass\n")
+            case = {"native_runner": "unittest", "test": test.name, "native_test": "TestCase.test_one"}
+            for argv, expected in ((["-I"], "FAIL"), ([], "PASS")):
+                command = [sys.executable, *argv, "-m", "unittest", "isolated_fixture"]
+                self.assertEqual(execute_case({**case, "commands": [command]}, directory, os.environ)[0], expected)
+
+    def test_unittest_wrapper_honors_failfast_and_buffer(self):
+        with TemporaryDirectory() as directory:
+            test = Path(directory) / "fixture.py"
+            test.write_text(
+                "import unittest\nclass Tests(unittest.TestCase):\n"
+                "    def test_first(self): self.fail('controlled failure')\n"
+                "    def test_second(self): print('second method ran')\n"
+            )
+            for args, expected, hidden in ((["-f"], "FAIL", "second method ran"),
+                                           (["-b", "fixture.Tests.test_second"], "PASS", "second method ran")):
+                command = [sys.executable, "-m", "unittest", *args]
+                if len(args) == 1:
+                    command.append("fixture")
+                output = io.StringIO()
+                case = {"native_runner": "unittest", "test": test.name,
+                        "native_test": "Tests.test_second", "commands": [command]}
+                with redirect_stdout(output):
+                    self.assertEqual(execute_case(case, directory, os.environ)[0], expected)
+                self.assertNotIn(hidden, output.getvalue())
+
     def test_unittest_records_passes_alongside_setup_and_subtest_skips(self):
         with TemporaryDirectory() as directory:
             test = Path(directory) / "test_fixture.py"
@@ -192,11 +370,50 @@ class NativeOutcomeTests(unittest.TestCase):
                 "        with self.subTest('required'): self.assertEqual(2 + 2, 4)\n"
             )
             passing = "class Passing(unittest.TestCase):\n    def test_pass(self): self.assertTrue(True)\n"
-            for content, wanted in ((passing + setup_skip, "PASS"), (subtests, "PASS"),
+            for content, wanted in ((passing + setup_skip, "PASS"), (subtests, "SKIP"),
                                     (setup_skip, "SKIP"), ("", "FAIL")):
                 with self.subTest(wanted=wanted), redirect_stdout(io.StringIO()):
                     test.write_text(source + content, encoding="utf-8")
                     self.assertEqual(execute_case(case, directory, os.environ)[0], wanted)
+
+    def test_named_unittest_reports_skip_after_passing_subtest(self):
+        with TemporaryDirectory() as directory, redirect_stdout(io.StringIO()):
+            test = Path(directory) / "fixture.py"
+            test.write_text(
+                "import unittest\nclass Tests(unittest.TestCase):\n"
+                "    def test_mixed(self):\n"
+                "        with self.subTest('passes'): self.assertTrue(True)\n"
+                "        with self.subTest('skips'): self.skipTest('optional')\n"
+            )
+            case = {"native_runner": "unittest", "test": test.name, "native_test": "Tests.test_mixed",
+                    "commands": [[sys.executable, "-m", "unittest", "fixture"]]}
+            self.assertEqual(execute_case(case, directory, os.environ)[0], "SKIP")
+
+    def test_named_unittest_matches_class_setup_skip_to_loaded_methods(self):
+        with TemporaryDirectory() as directory, redirect_stdout(io.StringIO()):
+            test = Path(directory) / "fixture.py"
+            test.write_text(
+                "import unittest\nclass Tests(unittest.TestCase):\n"
+                "    @classmethod\n"
+                "    def setUpClass(cls): raise unittest.SkipTest('optional')\n"
+                "    def test_selected(self): pass\n"
+                "    def test_unselected(self): pass\n"
+            )
+            case = {"native_runner": "unittest", "test": test.name,
+                    "commands": [[sys.executable, "-m", "unittest", "fixture.Tests.test_selected"]]}
+            for name, expected in (("Tests.test_selected", "SKIP"), ("Tests.test_unselected", "FAIL")):
+                self.assertEqual(execute_case({**case, "native_test": name}, directory, os.environ)[0], expected)
+
+    def test_unittest_cleanup_output_does_not_hide_the_named_result(self):
+        with TemporaryDirectory() as directory, redirect_stdout(io.StringIO()):
+            test = Path(directory) / "fixture.py"
+            test.write_text(
+                "import atexit, unittest\natexit.register(print, 'cleanup')\n"
+                "class Tests(unittest.TestCase):\n    def test_pass(self): pass\n"
+            )
+            case = {"native_runner": "unittest", "test": test.name, "native_test": "Tests.test_pass",
+                    "commands": [[sys.executable, "-m", "unittest", "fixture"]]}
+            self.assertEqual(execute_case(case, directory, os.environ)[0], "PASS")
 
     def test_named_unittest_must_run_from_the_declared_file(self):
         with TemporaryDirectory() as directory, redirect_stdout(io.StringIO()):
@@ -347,6 +564,41 @@ class CheckoutIdentityTests(unittest.TestCase):
             self.assertFalse((language / "next-case-marker").exists())
 
 
+    def test_report_rejects_new_files_inside_input_paths(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch("inventory.ROOT", root), patch("inventory.execute_case") as execute:
+                for path in (root / "languages" / "new.json", root / "tools" / "new.json"):
+                    with self.assertRaisesRegex(ValueError, "inside project inputs"):
+                        run_cases({}, [], path)
+                execute.assert_not_called()
+
+    def test_report_protects_linked_worktree_git_paths(self):
+        with TemporaryDirectory() as directory:
+            base = Path(directory)
+            root, linked = base / "source", base / "linked"
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            git = ["git", "-C", str(root)]
+            subprocess.run([*git, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                            "commit", "--allow-empty", "-qm", "fixture"], check=True)
+            subprocess.run([*git, "worktree", "add", "--detach", "-q", str(linked)], check=True)
+            with patch("inventory.ROOT", linked):
+                for path in (root / ".git", root / ".git/worktrees/linked"):
+                    with self.assertRaisesRegex(ValueError, "inside project inputs"):
+                        report_destination(path / "report.json")
+                self.assertEqual(report_destination(base / "report.json"), base / "report.json")
+
+    def test_report_preflight_rejects_directory_and_file_parent(self):
+        with TemporaryDirectory() as directory:
+            base = Path(directory)
+            parent = base / "file"
+            parent.touch()
+            with patch("inventory.ROOT", base / "project"), patch("inventory.execute_case") as execute:
+                for path in (base, parent / "report.json"):
+                    with self.assertRaisesRegex(ValueError, "filename with a directory parent"):
+                        run_cases({}, [], path)
+                execute.assert_not_called()
+
     def test_report_rejects_tracked_destinations_before_running_cases(self):
         with TemporaryDirectory() as directory:
             root = Path(directory)
@@ -373,6 +625,154 @@ class CheckoutIdentityTests(unittest.TestCase):
 
 
 class ReleaseEvidenceTests(unittest.TestCase):
+    def test_archive_manifest_rejects_nested_duplicate_keys(self):
+        with self.assertRaisesRegex(ValueError, "duplicate archive manifest field"):
+            load_manifest('{"versions":{"v0.0.1":{"source_commit":"a","source_commit":"b"}}}')
+
+    def test_archive_manifest_rejects_boolean_schema(self):
+        with self.assertRaisesRegex(ValueError, "schema_version must be integer"):
+            load_manifest('{"schema_version":true}')
+        self.assertEqual(load_manifest('{"schema_version":1}'), {"schema_version": 1})
+
+    def test_github_state_treats_only_expected_not_found_as_missing(self):
+        for status in (403, 404, 429, 503):
+            with self.subTest(status=status), patch.dict(os.environ, {"GITHUB_API_URL": "https://example.invalid"}):
+                failure = HTTPError("https://example.invalid", status, "fixture", {}, None)
+                with patch("release_record.urlopen", side_effect=failure):
+                    if status == 404:
+                        self.assertIsNone(github_resource("tag", allow_missing=True))
+                    else:
+                        with self.assertRaisesRegex(ValueError, f"HTTP {status}"):
+                            github_resource("tag", allow_missing=True)
+                if status == 404:
+                    with patch("release_record.urlopen", side_effect=failure):
+                        with self.assertRaisesRegex(ValueError, "HTTP 404"):
+                            github_resource("required commit")
+
+    def test_fresh_candidate_requires_a_visible_checkout(self):
+        checkout = "a" * 40
+        with patch("release_record.github_resource", side_effect=[None, None, {"sha": checkout}]) as read:
+            verify_candidate_target("example/vault", "v1.2.3", checkout)
+        self.assertEqual([call.args[0] for call in read.call_args_list], [
+            "repos/example/vault/releases/tags/v1.2.3", "repos/example/vault/git/ref/tags/v1.2.3",
+            f"repos/example/vault/git/commits/{checkout}",
+        ])
+        with patch("release_record.github_resource", side_effect=[None, None, {"sha": "b" * 40}]):
+            with self.assertRaisesRegex(ValueError, "wrong object"):
+                verify_candidate_target("example/vault", "v1.2.3", checkout)
+
+    def test_published_release_and_conflicting_tag_are_rejected(self):
+        checkout = "a" * 40
+        with patch("release_record.github_resource", return_value={"tag_name": "v1.2.3", "draft": False}):
+            with self.assertRaisesRegex(ValueError, "already published"):
+                verify_candidate_target("example/vault", "v1.2.3", checkout)
+        ref = {"ref": "refs/tags/v1.2.3", "object": {"type": "commit", "sha": "b" * 40}}
+        with patch("release_record.github_resource", side_effect=[None, ref]):
+            with self.assertRaisesRegex(ValueError, "not the validated checkout"):
+                verify_candidate_target("example/vault", "v1.2.3", checkout)
+
+    def test_matching_unpublished_lightweight_and_annotated_tags_are_accepted(self):
+        checkout = "a" * 40
+        commit = {"type": "commit", "sha": checkout}
+        tag = {"type": "tag", "sha": "b" * 40}
+        draft = {"tag_name": "v1.2.3", "draft": True}
+        for target, remaining in ((commit, []), (tag, [{"object": commit}])):
+            with patch("release_record.github_resource", side_effect=[
+                draft, {"ref": "refs/tags/v1.2.3", "object": target}, *remaining,
+            ]):
+                verify_candidate_target("example/vault", "v1.2.3", checkout)
+        with patch("release_record.github_resource", side_effect=[
+            None, {"ref": "refs/tags/v1.2.3", "object": tag}, {"object": tag},
+        ]):
+            with self.assertRaisesRegex(ValueError, "Could not resolve tag"):
+                verify_candidate_target("example/vault", "v1.2.3", checkout)
+
+    def test_preflight_and_receipt_check_current_release_state(self):
+        checkout = "a" * 40
+        environment = {
+            "GITHUB_SHA": checkout, "GITHUB_REPOSITORY": "example/vault",
+            "GITHUB_EVENT_NAME": "workflow_dispatch", "LYDITE_RELEASE_VERSION": "v1.2.3",
+            "GITHUB_RUN_ID": "123", "GITHUB_RUN_ATTEMPT": "1", "GITHUB_SERVER_URL": "https://example.invalid",
+        }
+        support = [{"artifact": {"expires_at": "2026-12-19T00:00:00Z"}}]
+        with TemporaryDirectory() as folder, patch.dict(os.environ, environment, clear=True), \
+                patch("release_record.git", side_effect=lambda *args: (
+                    '{"schema_version":1,"current":"v0.0.3","versions":{"v0.0.3":{}}}' if args[0] == "show" else checkout
+                )) as source, \
+                patch("release_record.fetch_support", return_value=support) as fetch, \
+                patch("release_record.graphify_contract"), patch("release_record.verify_support_payloads"), \
+                patch("release_record.verify_candidate_target") as verify, redirect_stdout(io.StringIO()):
+            with patch.object(sys, "argv", ["release_record.py", "--check-target"]):
+                record_release()
+            verify.assert_called_once_with("example/vault", "v1.2.3", checkout)
+            fetch.assert_not_called()
+            output = Path(folder) / "receipt.json"
+            with patch.object(sys, "argv", ["release_record.py", str(output)]):
+                verify.side_effect = ValueError("v1.2.3 is already published")
+                with self.assertRaisesRegex(SystemExit, "already published"):
+                    record_release()
+                self.assertFalse(output.exists())
+                verify.side_effect = None
+                record_release()
+            record = json.loads(output.read_bytes())
+            self.assertEqual(record["target"], "v1.2.3")
+            self.assertEqual(record["archive_current"], "v0.0.3")
+            source.assert_any_call("show", f"{checkout}:versions/manifest.json")
+
+    def test_preflight_records_distinct_rejections_without_candidate_receipt(self):
+        with TemporaryDirectory() as directory, patch.dict(os.environ, {
+            "GITHUB_EVENT_NAME": "workflow_dispatch", "LYDITE_RELEASE_VERSION": "v1.2.3",
+            "GITHUB_SHA": "a" * 40, "GITHUB_RUN_ID": "42", "GITHUB_RUN_ATTEMPT": "2",
+        }, clear=True):
+            target = Path(directory) / "preflight.json"
+            for failure, reason in ((CandidateRejected("published", "already published"), "published"),
+                                    (CandidateRejected("tag_conflict", "different commit"), "tag_conflict"),
+                                    (ValueError("GitHub unavailable"), "unavailable")):
+                with patch("release_record.verify_candidate_target", side_effect=failure):
+                    with self.assertRaises(SystemExit):
+                        run_preflight("example/vault", "a" * 40, target)
+                result = json.loads(target.read_bytes())
+                self.assertEqual((result["kind"], result["outcome"], result["reason"], result["attempt"]),
+                                 ("named-candidate-preflight", "REJECTED", reason, "2"))
+            with patch.dict(os.environ, {"LYDITE_RELEASE_VERSION": "invalid"}):
+                with self.assertRaisesRegex(SystemExit, "invalid_target"):
+                    run_preflight("example/vault", "a" * 40, target)
+
+    def test_routine_validation_has_no_release_identity(self):
+        self.assertEqual(receipt_context("pull_request", pr_head="head", pr_base="base"), {
+            "kind": "validation", "event": "pull_request",
+            "pull_request_head": "head", "pull_request_base": "base",
+        })
+        self.assertEqual(receipt_context("workflow_dispatch")["kind"], "validation")
+        with self.assertRaisesRegex(ValueError, "explicit workflow dispatch"):
+            receipt_context("pull_request", "v1.2.3")
+
+    def test_explicit_dispatch_binds_a_valid_release_target(self):
+        context = receipt_context("workflow_dispatch", "v1.2.3")
+        self.assertEqual(context["kind"], "release_candidate")
+        self.assertEqual(context["target"], "v1.2.3")
+        self.assertEqual(context["publication_state"], "awaiting-owner-approval")
+        with self.assertRaisesRegex(ValueError, "vMAJOR.MINOR.PATCH"):
+            receipt_context("workflow_dispatch", "main")
+
+    def test_paginated_lookup_reads_current_attempt_and_reports_missing(self):
+        jobs = [{"name": name, "id": index, "run_id": 1, "run_attempt": 26, "conclusion": "success"}
+                for index, (name, _) in enumerate(SUPPORTING_JOBS, 1)]
+        current = [{"name": f"{prefix}-attempt-26", "id": index, "expired": False,
+                    "expires_at": "2026-12-19T00:00:00Z", "digest": "sha256:fixture"}
+                   for index, (_, prefix) in enumerate(SUPPORTING_JOBS, 1) if prefix]
+        previous = [{"name": f"prior-{index}", "id": index + 100, "expired": False} for index in range(100)]
+        def response(args, text):
+            self.assertIn("--paginate", args)
+            if "/jobs?" in args[-1]:
+                return json.dumps({"jobs": jobs})
+            return json.dumps({"artifacts": previous}) + "\n" + json.dumps({"artifacts": current})
+        with patch("release_record.subprocess.check_output", side_effect=response), patch("release_record.time.sleep"):
+            self.assertEqual(len(fetch_support("example/vault", 1, 26, "url")), len(SUPPORTING_JOBS))
+            current.pop()
+            with self.assertRaisesRegex(ValueError, "unavailable or incomplete"):
+                fetch_support("example/vault", 1, 26, "url")
+
     def test_receipt_requires_a_complete_same_attempt_evidence_set(self):
         attempt, run_id = 2, 123
         jobs = [{"name": name, "id": index, "run_id": run_id, "run_attempt": attempt, "conclusion": "success"}
@@ -384,7 +784,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
         def verify():
             return supporting_evidence(jobs, artifacts, run_id, attempt, "https://example.invalid/runs/123")
 
-        self.assertEqual([item["artifact"]["id"] for item in verify() if "artifact" in item], [1, 2, 3])
+        self.assertEqual([item["artifact"]["id"] for item in verify() if "artifact" in item], [1, 2, 3, 4])
         jobs[0]["run_attempt"] = 1
         with self.assertRaisesRegex(ValueError, "attempt 2.*Re-run all jobs"):
             verify()

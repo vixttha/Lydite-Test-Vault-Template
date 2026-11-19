@@ -5,18 +5,57 @@ on:
     branches: [main, hardening/v0.0.3]
   pull_request:
   workflow_dispatch:
+    inputs:
+      release_version:
+        description: Optional version for a named release candidate
+        required: false
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: lydite-${{ github.ref }}
+  group: >-
+    ${{ github.event_name == 'workflow_dispatch' && inputs.release_version != '' &&
+        format('lydite-candidate:{0}:{1}', github.ref, inputs.release_version) ||
+        format('lydite-validation:{0}', github.ref) }}
   cancel-in-progress: true
 
 jobs:
+  candidate-preflight:
+    name: Check named release target
+    if: github.event.repository.private == false && github.event_name == 'workflow_dispatch' && inputs.release_version != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+      - name: Check GitHub release and tag state
+        env:
+          LYDITE_RELEASE_VERSION: ${{ inputs.release_version }}
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python tools/release_record.py --check-target
+          --preflight-record "${{ runner.temp }}/lydite-preflight/verdict.json"
+      - name: Upload named preflight verdict
+        if: always() && !cancelled()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: lydite-preflight-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/lydite-preflight/verdict.json
+          if-no-files-found: ignore
+          retention-days: 30
+
   inventory-and-adoption:
     name: Inventory and starter adoption
-    if: github.event.repository.private == false
+    needs: candidate-preflight
+    if: >-
+      !cancelled() && github.event.repository.private == false &&
+      (needs.candidate-preflight.result == 'success' || needs.candidate-preflight.result == 'skipped')
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
@@ -33,16 +72,20 @@ jobs:
         with:
           go-version: '1.25.5'
           cache: false
+      - name: Install locked Markdown parser
+        run: >-
+          python -m pip install --only-binary=:all: --no-deps --require-hashes
+          -r tools/markdown-requirements.txt
       - name: Verify inventory and adoption
         shell: bash
         run: |
           set -o pipefail
           {
             printf 'Checkout: %s\n\n' "$(git rev-parse HEAD)"
-            python tools/inventory.py
+            python tools/inventory.py --require-upstream
           } | tee -a "$GITHUB_STEP_SUMMARY"
-          python tools/check_doc_links.py
-          python -m unittest discover -s tools -p 'test_inventory.py' -v
+          python tools/check_doc_links.py --tree HEAD
+          python -m unittest discover -s tools -p 'test_*.py' -v
           python tools/verify_adoption.py --fixture python-cli
           python tools/verify_adoption.py --fixture go-api
           python tools/verify_adoption.py --fixture docs-only
@@ -59,7 +102,10 @@ jobs:
 
   examples:
     name: Language examples (${{ matrix.runner }})
-    if: github.event.repository.private == false
+    needs: candidate-preflight
+    if: >-
+      !cancelled() && github.event.repository.private == false &&
+      (needs.candidate-preflight.result == 'success' || needs.candidate-preflight.result == 'skipped')
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 15
     strategy:
@@ -112,16 +158,37 @@ jobs:
           python --version
           ruby --version
           rustc --version
+      - name: Run copied receipt filename controls
+        run: python -m unittest discover -s tools -p 'test_starter_receipts.py'
       - name: Run language examples
+        id: run-cases
         shell: bash
         env:
           LYDITE_RUNNER: ${{ matrix.runner }}
         run: |
           set -o pipefail
-          python tools/inventory.py --runner "$LYDITE_RUNNER" \
+          python tools/inventory.py --require-upstream --runner "$LYDITE_RUNNER" \
              --evidence "$RUNNER_TEMP/lydite-cases/examples.json" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Retain pre-execution lane failure
+        if: failure() && !cancelled()
+        shell: bash
+        env:
+          LYDITE_RUNNER: ${{ matrix.runner }}
+          LYDITE_EARLY_STAGE: ${{ steps.run-cases.outcome == 'skipped' && 'setup' || 'inventory' }}
+        run: |
+          output="$RUNNER_TEMP/lydite-cases/examples.json"
+          if [[ -f "$output" ]]; then
+            exit 0
+          fi
+          if [[ -f tools/validation_contract.py ]] && command -v python >/dev/null; then
+            python tools/validation_contract.py "$output" "$LYDITE_RUNNER" "$LYDITE_EARLY_STAGE"
+          else
+            mkdir -p "$(dirname "$output")"
+            printf '{"schema_version":1,"kind":"pre-execution-failure","outcome":"BLOCKED","failed_stage":"%s","expected_checkout_sha":"%s","run_id":"%s","attempt":"%s","runner":"%s","cases":[]}\n' \
+              "$LYDITE_EARLY_STAGE" "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$LYDITE_RUNNER" > "$output"
+          fi
       - name: Upload per-case evidence
-        if: always()
+        if: always() && !cancelled()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: lydite-cases-${{ matrix.runner }}-attempt-${{ github.run_attempt }}
@@ -131,7 +198,10 @@ jobs:
 
   graphify:
     name: Rebuild and verify archived Graphify maps
-    if: github.event.repository.private == false
+    needs: candidate-preflight
+    if: >-
+      !cancelled() && github.event.repository.private == false &&
+      (needs.candidate-preflight.result == 'success' || needs.candidate-preflight.result == 'skipped')
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     env:
@@ -146,12 +216,16 @@ jobs:
           python-version: '3.12'
       - name: Install locked Graphify and MCP packages
         run: >-
-          python -m pip install --no-cache-dir --only-binary=:all: --no-deps
-          -r tools/graphify/requirements.txt
+          python -m pip install --no-cache-dir --only-binary=:all: --no-deps --require-hashes
+          -r tools/graphify/requirements.txt -r tools/markdown-requirements.txt
+      - name: Test archive and MCP verification
+        run: python -m unittest discover -s tools/graphify -p 'test_*.py'
       - name: Resolve upstream pins and verify archived maps
         shell: bash
         run: |
-          python tools/graphify/version_maps.py "$RUNNER_TEMP/lydite-maps" --fetch-upstream --check |
+          sha256sum tools/graphify/requirements.txt | tee -a "$GITHUB_STEP_SUMMARY"
+          python tools/graphify/version_maps.py "$RUNNER_TEMP/lydite-maps" --fetch-upstream --check \
+            --verification-record "$RUNNER_TEMP/lydite-graphify/validation.json" |
             tee -a "$GITHUB_STEP_SUMMARY"
       - name: Verify changed archive modes and archive or graph bytes fail
         shell: bash
@@ -178,10 +252,22 @@ jobs:
           fi
           grep -F "Changed: Graphify HQ/v0.0.3/graph.json" "$log"
 
-  release-candidate:
-    name: Record candidate source and validation
-    if: github.event.repository.private == false
+      - name: Upload Graphify verification record
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: lydite-graphify-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/lydite-graphify/validation.json
+          if-no-files-found: error
+          retention-days: 30
+
+  validation-receipt:
+    name: Record checkout and validation evidence
     needs: [inventory-and-adoption, examples, graphify]
+    # A skipped named-only preflight is expected for routine validation.
+    if: >-
+      !cancelled() && github.event.repository.private == false &&
+      needs.inventory-and-adoption.result == 'success' &&
+      needs.examples.result == 'success' && needs.graphify.result == 'success'
     permissions:
       actions: read
       contents: read
@@ -194,15 +280,17 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: '3.12'
-      - name: Record the validated candidate
+      - name: Record the validated checkout
         env:
           CANDIDATE_PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          CANDIDATE_PR_BASE: ${{ github.event.pull_request.base.sha }}
+          LYDITE_RELEASE_VERSION: ${{ inputs.release_version }}
           GH_TOKEN: ${{ github.token }}
-        run: python tools/release_record.py "${{ runner.temp }}/lydite-release/candidate.json"
-      - name: Upload candidate receipt
+        run: python tools/release_record.py "${{ runner.temp }}/lydite-receipt/receipt.json"
+      - name: Upload validation receipt
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: lydite-release-candidate-attempt-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/lydite-release/
+          name: lydite-${{ github.event_name == 'workflow_dispatch' && inputs.release_version != '' && 'release-candidate' || 'validation' }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/lydite-receipt/
           if-no-files-found: error
           retention-days: 30

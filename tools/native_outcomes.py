@@ -6,9 +6,11 @@ import os
 import re
 import sys
 import unittest
+from pathlib import Path
 
 
 UNITTEST_RESULT = "LYDITE_UNITTEST_RESULTS "
+UNITTEST_RESULT_FILE = "LYDITE_UNITTEST_RESULT_FILE"
 
 
 NATIVE_RUNNERS = {"go-json", "node-tap", "rust-libtest", "unittest"}
@@ -19,8 +21,23 @@ def go_events(output):
 
 
 TAP_RESULT = re.compile(r"^( *)(ok|not ok) [0-9]+(?: - (.*))?$")
-TAP_DIRECTIVE = re.compile(r"(?<!\\)\s+#\s*(skip|todo)(?:\s|$)", re.I)
+TAP_DIRECTIVE = re.compile(r"\s+#\s*(skip|todo)(?:\s|$)", re.I)
+TAP_NAME_ESCAPE = re.compile(r"\\([\\#])")
 
+
+
+def node_command(command, result):
+    reporter = Path(__file__).with_name("node_outcomes.mjs").resolve().as_uri()
+    index = command.index("--test-reporter=tap")
+    return [*command[:index], "--test-reporter=tap", "--test-reporter-destination=stdout",
+            f"--test-reporter={reporter}", f"--test-reporter-destination={result}", *command[index + 1:]]
+
+
+def node_results(output):
+    if output.startswith("{"):
+        return [(entry["path"], entry["outcome"]) for entry in json.loads(output)["leaves"]]
+    return [([name], {"ok": "pass", "skip": "skip"}.get(status, "fail"))
+            for name, status in node_leaf_results(output)]
 
 def node_leaf_results(output):
     """Node TAP prints child results before the parent result at a lower indentation."""
@@ -40,11 +57,7 @@ def node_leaf_results(output):
         name = (title or "").strip()
         if directive:
             name = (title or "")[:directive.start()].strip()
-        yield name, directive[1].lower() if directive else status
-
-
-def node_leaf_outcomes(output):
-    return (status for _, status in node_leaf_results(output))
+        yield TAP_NAME_ESCAPE.sub(r"\1", name), directive[1].lower() if directive else status
 
 
 def unittest_command(command):
@@ -84,7 +97,7 @@ def skipped_tests(runner, output):
     if runner == "go-json":
         return sum(bool(event.get("Test") and event.get("Action") == "skip") for event in go_events(output))
     if runner == "node-tap":
-        return sum(outcome == "skip" for outcome in node_leaf_outcomes(output))
+        return sum(outcome == "skip" for _, outcome in node_results(output))
     if runner == "unittest":
         return unittest_outcomes(output)[1]
     return sum(map(int, re.findall(r"^test result: ok\. .*? (\d+) ignored;", output, re.M)))
@@ -97,7 +110,7 @@ def passed_tests(runner, output):
             for event in go_events(output) if isinstance(event, dict)
         )
     if runner == "node-tap":
-        return sum(outcome == "ok" for outcome in node_leaf_outcomes(output))
+        return sum(outcome == "pass" for _, outcome in node_results(output))
     if runner == "rust-libtest":
         return int(matches[-1]) if (matches := re.findall(
             r"^test result: ok\. (\d+) passed;", output, re.M,
@@ -115,8 +128,8 @@ def selected_outcome(runner, output, name, source):
         outcomes = [event["Action"] for event in events
                     if event.get("Test") == name and event.get("Action") in ("pass", "skip", "fail")]
     elif runner == "node-tap":
-        outcomes = [{"ok": "pass", "skip": "skip"}.get(status, "fail")
-                    for title, status in node_leaf_results(output) if title == name]
+        outcomes = [status for path, status in node_results(output)
+                    if (path if isinstance(name, list) else path[-1]) == name]
     elif runner == "rust-libtest":
         outcomes = [{"ok": "pass", "ignored": "skip", "FAILED": "fail"}[status]
                     for status in re.findall(rf"^test {re.escape(name)} \.\.\. (ok|ignored|FAILED)(?:$|,)", output, re.M)]
@@ -149,24 +162,48 @@ class EvidenceResult(unittest.TextTestResult):
         super().addSuccess(test)
         self.passed.add(test)
 
-    def addSubTest(self, test, subtest, err):
-        super().addSubTest(test, subtest, err)
-        if err is None:
-            self.passed.add(test)
+
+def suite_methods(suite):
+    for item in suite:
+        if isinstance(item, unittest.TestSuite):
+            yield from suite_methods(item)
+        elif isinstance(item, unittest.TestCase):
+            yield item
+
+
+class EvidenceRunner(unittest.TextTestRunner):
+    resultclass = EvidenceResult
+
+    def run(self, test):
+        methods = list(suite_methods(test))
+        result = super().run(test)
+        skipped_setups = {item.id() for item, _ in result.skipped}
+        result.setup_skips = {
+            method for method in methods
+            if f"setUpClass ({unittest.util.strclass(type(method))})" in skipped_setups
+            or f"setUpModule ({type(method).__module__})" in skipped_setups
+        }
+        return result
 
 
 if __name__ == "__main__":
-    sys.path[0] = os.getcwd()
+    if not sys.flags.safe_path:
+        sys.path[0] = os.getcwd()
     program = unittest.main(
-        module=None, testRunner=unittest.TextTestRunner(resultclass=EvidenceResult), exit=False,
+        module=None, testRunner=EvidenceRunner, exit=False,
     )
     result = program.result
     passed = [entry for test in result.passed if (entry := unittest_identity(test))]
-    skipped = {getattr(test, "test_case", test) for test, _ in result.skipped} - result.passed
+    skipped = {getattr(test, "test_case", test) for test, _ in result.skipped}
+    skipped = (skipped | result.setup_skips) - result.passed
     skipped = [entry for test in skipped if (entry := unittest_identity(test))]
-    print(UNITTEST_RESULT + json.dumps({
+    record = UNITTEST_RESULT + json.dumps({
         "passed": len(result.passed), "skipped": len(result.skipped),
         "passing": sorted(passed, key=lambda entry: (entry["source"], entry["id"])),
         "skipping": sorted(skipped, key=lambda entry: (entry["source"], entry["id"])),
-    }))
+    })
+    if result_file := os.environ.get(UNITTEST_RESULT_FILE):
+        Path(result_file).write_text(record + "\n", encoding="utf-8")
+    else:
+        print(record)
     raise SystemExit(0 if result.wasSuccessful() else 1)

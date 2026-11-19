@@ -4,9 +4,9 @@
   "source_commit": "29105a580b4d570103f5cca2fe3bd87561a85567",
   "source_path": "docs/test-vault/public-template",
   "graphify_version": "0.9.109",
-  "graph_sha256": "0b2ba28d1b47077ededcd1be34fb3d50a8a6fa44872c99ebee053495b99e45f6",
+  "graph_sha256": "8b180a078df2be2f7de0d9598d3304d7ccefbd7fc56c3d1e0a60fa14444c4453",
   "nodes": 41,
-  "edges": 47,
+  "edges": 50,
   "sources": {
     "README.md": {
       "archive_path": "versions/v0.0.2/README.md",

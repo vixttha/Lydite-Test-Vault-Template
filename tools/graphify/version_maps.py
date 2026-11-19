@@ -5,14 +5,18 @@ import ast
 import asyncio
 import base64
 import hashlib
+import io
 import json
+import os
 import posixpath
 import re
 import subprocess
 import sys
+import tokenize
 from importlib.metadata import version
 from pathlib import Path, PurePosixPath
-from urllib.parse import unquote, urlsplit
+from tempfile import TemporaryDirectory
+from urllib.parse import quote, unquote, urlsplit
 
 from graphify.build import build_from_json
 from graphify.export import to_json
@@ -20,14 +24,16 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from archive_manifest import load_manifest
+from markdown_docs import MARKDOWN, heading_ids, headings, link_targets
+
+
 ROOT = Path(__file__).resolve().parents[2]
 ARCHIVE = ROOT / "versions"
 MAPS = ROOT / "Graphify HQ"
 UPSTREAM = "https://github.com/vixttha/AlderVale-Pact-of-Ten.git"
 VERSION = re.compile(r"v[0-9]+\.[0-9]+\.[0-9]+")
-HEADING = re.compile(r"^ {0,3}(#{1,6})\s+(.+?)\s*#*\s*$")
-FENCE = re.compile(r"^ {0,3}(\x60{3,}|~{3,})")
-LINK = re.compile(r"\[[^\]\n]+\]\(([^()\s]+)(?:\s+[^()]*)?\)")
 
 
 def git(*args):
@@ -37,13 +43,12 @@ def git(*args):
 def fetch_source(commit):
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
         raise ValueError("expected a full pinned upstream commit")
-    query = subprocess.run(
-        ["git", "-C", str(ROOT), "cat-file", "-e", f"{commit}^{{commit}}"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
-    )
-    if query.returncode:
+    try:
         git("fetch", "--no-tags", "--depth=1", UPSTREAM, commit)
-        git("cat-file", "-e", f"{commit}^{{commit}}")
+    except subprocess.CalledProcessError as error:
+        raise ValueError(f"Could not verify archive pin {commit} against {UPSTREAM}") from error
+    if git("rev-parse", "FETCH_HEAD^{commit}").decode("ascii").strip() != commit:
+        raise ValueError(f"Public upstream returned a different archive pin for {commit}")
 
 
 def read_archive(tag, record):
@@ -64,30 +69,40 @@ def read_archive(tag, record):
     archived = {p.relative_to(directory).as_posix(): p for p in directory.rglob("*") if p.is_file()}
     if not expected or archived.keys() != expected.keys():
         raise ValueError(f"{tag}: archived file inventory differs from {commit}:{source}")
-    tracked_modes = {}
+    tracked_entries = {}
     relative_directory = directory.relative_to(ROOT).as_posix()
     for entry in git("ls-files", "--stage", "-z", "--", relative_directory + "/").split(b"\0"):
         if not entry:
             continue
         meta, path = entry.decode().split("\t", 1)
-        mode, _, stage = meta.split()
+        mode, object_id, stage = meta.split()
         if stage != "0":
             raise ValueError(f"{tag}: unmerged archive file {path}")
-        tracked_modes[path.removeprefix(relative_directory + "/")] = mode
-    if tracked_modes.keys() != expected.keys():
+        tracked_entries[path.removeprefix(relative_directory + "/")] = (mode, object_id)
+    if tracked_entries.keys() != expected.keys():
         raise ValueError(f"{tag}: tracked archive inventory differs from {commit}:{source}")
     sources = {}
     for name, (mode, digest) in sorted(expected.items()):
-        if tracked_modes[name] != mode:
+        staged_mode, staged_object = tracked_entries[name]
+        if staged_mode != mode:
             raise ValueError(
                 f"{tag}: archived Git mode differs for {name} "
-                f"(expected {mode}, found {tracked_modes[name]})"
+                f"(expected {mode}, found {staged_mode})"
             )
+        if staged_object != digest:
+            raise ValueError(f"{tag}: archived Git object differs for {name}")
         path = archived[name]
         data = path.read_bytes()
         if path.is_symlink() or hashlib.sha1(f"blob {len(data)}\0".encode() + data).hexdigest() != digest:
             raise ValueError(f"{tag}: archived bytes differ for {name}")
-        sources[name] = (path.relative_to(ROOT).as_posix(), digest, data.decode("utf-8"))
+        content = None
+        if path.suffix in {".md", ".py"}:
+            try:
+                encoding = tokenize.detect_encoding(io.BytesIO(data).readline)[0] if path.suffix == ".py" else "utf-8"
+                content = data.decode(encoding)
+            except (SyntaxError, UnicodeError) as error:
+                raise ValueError(f"{tag}: cannot decode archived text {name}: {error}") from error
+        sources[name] = (path.relative_to(ROOT).as_posix(), digest, content)
     return sources
 
 
@@ -96,18 +111,7 @@ def file_id(name):
 
 
 def markdown_sections(content):
-    fence = None
-    for number, line in enumerate(content.splitlines(), 1):
-        delimiter = FENCE.match(line)
-        if delimiter:
-            token = delimiter[1]
-            if fence is None:
-                fence = token
-            elif token[0] == fence[0] and len(token) >= len(fence) and not line[delimiter.end():].strip():
-                fence = None
-            continue
-        if not fence and (heading := HEADING.match(line)):
-            yield number, len(heading[1]), heading[2]
+    yield from headings(MARKDOWN.parse(content))
 
 
 def build_map(tag, record, sources, output):
@@ -118,12 +122,15 @@ def build_map(tag, record, sources, output):
                       "source_location": f"L{line}" if line else None}
 
     def edge(start, end, relation, path, line=None):
-        edges[start, end, relation] = {
+        edges[start, end, relation, line] = {
             "source": start, "target": end, "relation": relation, "source_file": path,
             "source_location": f"L{line}" if line else None, "confidence": "EXTRACTED",
             "confidence_score": 1.0, "weight": 1.0,
         }
 
+    parsed_docs = {name: MARKDOWN.parse(content) for name, (_, _, content) in sources.items()
+                   if name.endswith(".md")}
+    sections = {name: dict(heading_ids(tokens)) for name, tokens in parsed_docs.items()}
     node(tag, f"Test Vault template {tag}", "concept")
     for name, (path, _, content) in sources.items():
         key = file_id(name)
@@ -132,20 +139,33 @@ def build_map(tag, record, sources, output):
         edge(tag, key, "contains_file", path, 1)
         if name.endswith(".md"):
             stack = []
-            for number, level, title in markdown_sections(content):
+            tokens = parsed_docs[name]
+            for number, level, title in headings(tokens):
                 while stack and stack[-1][0] >= level:
                     stack.pop()
                 child = f"{key}:L{number}"
                 node(child, title, "concept", path, number)
                 edge(stack[-1][1] if stack else key, child, "contains_section", path, number)
                 stack.append((level, child))
-            for link in LINK.findall(content):
-                parsed = urlsplit(link)
-                if parsed.scheme or parsed.netloc or not parsed.path or parsed.path.startswith("/"):
+            for line, link in link_targets(tokens):
+                try:
+                    parsed = urlsplit(link)
+                except ValueError:
                     continue
-                target = posixpath.normpath(posixpath.join(posixpath.dirname(name), unquote(parsed.path)))
-                if target in sources and target != name:
-                    edge(key, file_id(target), "links_to", path)
+                if parsed.scheme or parsed.netloc or parsed.path.startswith("/") or not (parsed.path or parsed.fragment):
+                    continue
+                target = (posixpath.normpath(posixpath.join(posixpath.dirname(name), unquote(parsed.path)))
+                          if parsed.path else name)
+                if target not in sources:
+                    directory = posixpath.join(target, "README.md")
+                    if directory in sources:
+                        target = directory
+                fragment = unquote(parsed.fragment)
+                target_line = sections.get(target, {}).get(fragment)
+                if target_line:
+                    edge(key, f"{file_id(target)}:L{target_line}", "links_to", path, line)
+                elif target in sources and target != name:
+                    edge(key, file_id(target), "links_to", path, line)
         elif name.endswith(".py"):
             for item in ast.parse(content, filename=path).body:
                 if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
@@ -174,27 +194,37 @@ def build_map(tag, record, sources, output):
     lines = [f"# Test Vault template {tag}", "",
              "[Graphify map](graph.json) · [Source receipt](receipt.json) · [All versions](../README.md)", "",
              "## Indexed files", ""]
-    lines.extend(f"- [{name}](../../{entry['archive_path']})" for name, entry in receipt["sources"].items())
+    for name, entry in receipt["sources"].items():
+        label = name.replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
+        lines.append(f"- [{label}](../../{quote(entry['archive_path'], safe='/')})")
     (output / "README.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     return receipt
 
 
 async def verify(output, receipt):
+    if hashlib.sha256((output / "graph.json").read_bytes()).hexdigest() != receipt["graph_sha256"]:
+        raise ValueError(f"{output.name}: Graphify file digest differs from the receipt")
+    issue = None
     server = StdioServerParameters(command=sys.executable, args=["-m", "graphify.serve", str(output / "graph.json")])
     async with asyncio.timeout(30), stdio_client(server) as (reader, writer):
         async with ClientSession(reader, writer) as session:
             await session.initialize()
             result = await session.call_tool("graph_stats", {})
-            stats = {line for item in result.content if item.type == "text" for line in item.text.splitlines()}
+            stats = {line.removesuffix(" (matches HEAD)") if line.startswith("Built at commit: ") else line
+                     for item in result.content if item.type == "text" for line in item.text.splitlines()}
             expected = {f"Nodes: {receipt['nodes']}", f"Edges: {receipt['edges']}",
                         f"Built at commit: {receipt['source_commit']}"}
             if result.is_error or not expected <= stats:
-                raise ValueError(f"{output.name}: Graphify MCP statistics differ from the export")
-            for name, entry in receipt["sources"].items():
-                result = await session.call_tool("get_node", {"node_id": file_id(name)})
-                reply = "\n".join(item.text for item in result.content if item.type == "text")
-                if result.is_error or f"Source: {entry['archive_path']} L1" not in reply:
-                    raise ValueError(f"{output.name}: Graphify MCP could not resolve {name}: {reply[:400]}")
+                issue = "Graphify MCP statistics differ from the export"
+            else:
+                for name, entry in receipt["sources"].items():
+                    result = await session.call_tool("get_node", {"node_id": file_id(name)})
+                    reply = "\n".join(item.text for item in result.content if item.type == "text")
+                    if result.is_error or f"Source: {entry['archive_path']} L1" not in {line.lstrip() for line in reply.splitlines()}:
+                        issue = f"Graphify MCP could not resolve {name}: {reply[:400]}"
+                        break
+    if issue:
+        raise ValueError(f"{output.name}: {issue}")
 
 
 def compare(output, export_missing):
@@ -218,38 +248,77 @@ def compare(output, export_missing):
     return bool(extra or changed or missing)
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("output", type=Path)
-    parser.add_argument("--check", action="store_true")
-    parser.add_argument("--export-missing", action="store_true", help="Emit missing map files and an updated index in CI logs")
-    parser.add_argument("--fetch-upstream", action="store_true", help="fetch the pinned public AlderVale commits")
-    args = parser.parse_args()
-    output = args.output.resolve()
-    if output == MAPS or output.is_relative_to(MAPS) or (output.exists() and (not output.is_dir() or any(output.iterdir()))):
-        parser.error("output must be an empty directory outside Graphify HQ")
-    manifest = json.loads((ARCHIVE / "manifest.json").read_text(encoding="utf-8"))
+def rebuild(output, manifest, fetch_upstream):
     versions = manifest["versions"]
-    frames = {path.name for path in ARCHIVE.iterdir() if path.is_dir()}
-    if (manifest["schema_version"] != 1 or manifest["current"] not in versions or frames != versions.keys()
-            or not all(VERSION.fullmatch(tag) for tag in versions)):
-        raise ValueError("Version manifest and archive folders do not match")
     sorted_versions = sorted(versions, key=lambda tag: tuple(map(int, tag[1:].split("."))), reverse=True)
+    receipts = {}
     for tag in sorted_versions:
         record = versions[tag]
-        if args.fetch_upstream:
+        if fetch_upstream:
             fetch_source(record["source_commit"])
         sources = read_archive(tag, record)
         receipt = build_map(tag, record, sources, output / tag)
         asyncio.run(verify(output / tag, receipt))
+        receipts[tag] = receipt
         print(f"{tag}: Graphify MCP verified {len(sources)} archived files, {receipt['nodes']} nodes, "
               f"{receipt['edges']} edges, SHA-256 {receipt['graph_sha256']}")
     index = ["# Graphify HQ", "", "Maps for the [archived Test Vault templates](../versions/README.md).", "",
              f"Current archived version is **{manifest['current']}**.", ""]
     index.extend(f"- [{tag}]({tag}/README.md)" for tag in sorted_versions)
     (output / "README.md").write_text("\n".join(index) + "\n", encoding="utf-8")
+    return receipts
+
+
+def publish_batch(output, manifest, fetch_upstream):
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with TemporaryDirectory(prefix=".lydite-archive-", dir=output.parent) as directory:
+        stage = Path(directory) / "verified"
+        stage.mkdir()
+        receipts = rebuild(stage, manifest, fetch_upstream)
+        if output.exists():
+            output.rmdir()
+        stage.rename(output)
+    return receipts
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("output", type=Path)
+    parser.add_argument("--check", action="store_true")
+    parser.add_argument("--export-missing", action="store_true", help="Emit missing map files and an updated index in CI logs")
+    parser.add_argument("--fetch-upstream", action="store_true", help="fetch the pinned public AlderVale commits")
+    parser.add_argument("--verification-record", type=Path, help="write Graphify verification evidence for this run")
+    args = parser.parse_args()
+    if args.verification_record and (not args.check or not args.fetch_upstream):
+        parser.error("--verification-record requires --check and --fetch-upstream")
+    output = args.output.resolve()
+    if output == MAPS or output.is_relative_to(MAPS) or (output.exists() and (not output.is_dir() or any(output.iterdir()))):
+        parser.error("output must be an empty directory outside Graphify HQ")
+    manifest = load_manifest((ARCHIVE / "manifest.json").read_text(encoding="utf-8"))
+    versions = manifest["versions"]
+    frames = {path.name for path in ARCHIVE.iterdir() if path.is_dir()}
+    if (manifest["current"] not in versions or frames != versions.keys()
+            or not all(VERSION.fullmatch(tag) for tag in versions)):
+        raise ValueError("Version manifest and archive folders do not match")
+    scope = "public upstream" if args.fetch_upstream else "local Git objects only"
+    print(f"Archive source verification: {scope}.")
+    receipts = publish_batch(output, manifest, args.fetch_upstream)
     if args.check and compare(output, args.export_missing):
         sys.exit("Commit the matching Graphify HQ map, outline, and receipt for every archived version")
+    if args.verification_record:
+        lock = ROOT / "tools/graphify/requirements.txt"
+        record = {
+            "schema_version": 1, "kind": "graphify-verification",
+            "checkout_sha": git("rev-parse", "HEAD").decode("ascii").strip(),
+            "run_id": os.environ.get("GITHUB_RUN_ID"), "attempt": os.environ.get("GITHUB_RUN_ATTEMPT"),
+            "requirements_sha256": hashlib.sha256(lock.read_bytes()).hexdigest(),
+            "archives": {
+                tag: {key: receipt[key] for key in ("source_commit", "graph_sha256", "nodes", "edges")}
+                | {"mcp": "PASS"} for tag, receipt in receipts.items()
+            },
+        }
+        args.verification_record.parent.mkdir(parents=True, exist_ok=True)
+        args.verification_record.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
     if args.check:
         print(f"All {len(versions)} committed template maps match their verified rebuilds.")
 

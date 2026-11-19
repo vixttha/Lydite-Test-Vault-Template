@@ -4,7 +4,7 @@
   "source_commit": "9e030719ebfbe9c261e68aa7941f9438e363d6e3",
   "source_path": "docs/test-vault/public-template",
   "graphify_version": "0.9.109",
-  "graph_sha256": "103be3af904ad49a29fda7990e9b13f1e0f5f0bcb7d699612c1440530c9ca97a",
+  "graph_sha256": "afc784c899789305c2141dc8f9688d97c8524367423780fbe6f86b8293c8e7e2",
   "nodes": 20,
   "edges": 24,
   "sources": {

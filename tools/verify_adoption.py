@@ -10,6 +10,8 @@ import sys
 from tempfile import TemporaryDirectory
 from textwrap import dedent
 
+from check_doc_links import validate_paths
+
 
 ROOT = Path(__file__).resolve().parents[1]
 STARTER = ROOT / "starter"
@@ -95,11 +97,20 @@ def copy_and_check(sample, target):
     run(workflow_step, target, env=env, includes="Catalog result: PASS")
     if f"Checkout: {checkout}" not in summary.read_text(encoding="utf-8"):
         raise RuntimeError("Workflow summary omitted the tested checkout")
-    for name in ("README.md", "case-and-receipt.md"):
-        path = target / "test-vault" / name
-        for link in re.findall(r"\]\(([^)]+)\)", path.read_text(encoding="utf-8")):
-            if not (link.startswith(("https://", "#")) or (path.parent / link).is_file()):
-                raise RuntimeError(f"{path}: unresolved link {link}")
+    paths = [target / "test-vault" / name for name in ("README.md", "case-and-receipt.md")]
+    problems = validate_paths(target, paths)
+    if problems:
+        raise RuntimeError("\n".join(problems))
+    readme = paths[0]
+    original = readme.read_text(encoding="utf-8")
+    valid = "\n[Case format](evidence.md#case-manifest-v2)\n"
+    readme.write_text(original + valid, encoding="utf-8")
+    if validate_paths(target, paths):
+        raise AssertionError("A working copied section link was rejected")
+    readme.write_text(original + valid.replace("case-manifest-v2", "absent-section"), encoding="utf-8")
+    if not any("no matching heading" in issue for issue in validate_paths(target, paths)):
+        raise AssertionError("A missing copied section was accepted")
+    readme.write_text(original, encoding="utf-8")
 
     command = [sys.executable, str(VALIDATOR)]
     run(command, target, includes="1 unique cases across 1 topics")
@@ -111,6 +122,20 @@ def copy_and_check(sample, target):
     topics_path.write_text(f'["{topic}"]\n', encoding="utf-8")
     case_path.write_text(HEADER + row, encoding="utf-8")
     run(command, target, result=1, includes="expected a Markdown table divider")
+    invalid_fence = chr(96) * 3 + "lang" + chr(96) + "invalid"
+    case_path.write_text(invalid_fence + "\n\n" + catalog, encoding="utf-8")
+    run(command, target, includes="1 unique cases across 1 topics")
+    second = HEADER.replace("Suggested implementation", "Implementation").replace("Expected outcome", "Expected")
+    case_path.write_text(catalog + "\n" + second + DIVIDER + row.replace("-001", "-002"), encoding="utf-8")
+    run(command, target, result=1, includes="malformed Test Vault header for")
+    case_path.write_text("<pre>\n" + catalog + "</pre>\n", encoding="utf-8")
+    run(command, target, result=1, includes="no cases found")
+    blank = "| CORE-001 | Area | P0 | Implementation | <!-- hidden --> |\n"
+    case_path.write_text(HEADER + DIVIDER + blank, encoding="utf-8")
+    run(command, target, result=1, includes="invalid case row")
+    case_path.write_text(HEADER + DIVIDER + blank.replace("<!-- hidden -->", "Expected <!-- hidden -->"),
+                         encoding="utf-8")
+    run(command, target, includes="1 unique cases across 1 topics")
     for fence in ("```", "~~~"):
         example = f"{fence}markdown\n{HEADER}{DIVIDER}{row}{fence}\n\n"
         case_path.write_text(example + catalog, encoding="utf-8")
@@ -131,6 +156,11 @@ def copy_and_check(sample, target):
     for mixed in (commented + catalog, catalog + commented):
         case_path.write_text(mixed, encoding="utf-8")
         run([*command, "--topics", str(topics_path)], target, includes="1 unique cases across 1 topics")
+    raw_tag_example = "<!-- illustrated HTML tag\n<pre>\n    -->\n"
+    second_catalog = HEADER + DIVIDER + row.replace("-001", "-002")
+    case_path.write_text(catalog + "\n" + raw_tag_example + "\n" + second_catalog, encoding="utf-8")
+    run(command, target, includes="2 unique cases across 1 topics")
+    case_path.write_text(catalog + "\n" + commented, encoding="utf-8")
     hidden_manifest = target / "hidden-case.json"
     hidden_manifest.write_text(
         '{"schema_version":1,"case_id":"HIDDEN-001","required_checks":["fixture"],"shared_evidence":false}',
@@ -138,6 +168,19 @@ def copy_and_check(sample, target):
     )
     run([sys.executable, "test-vault/verify_receipts.py", "--case", str(hidden_manifest),
          "--receipts", "receipts"], target, result=1, includes="case ID must be registered")
+    orphan = "| FIXTURE-002 | Missing row | P0 | Fixture | Must be registered |\n"
+    malformed = "\n" + HEADER.replace("Expected outcome", "Expected result") + DIVIDER + orphan
+    for tail, message in (("\n" + orphan, "case FIXTURE-002 is outside"),
+                          (malformed, "malformed Test Vault header")):
+        case_path.write_text(catalog + tail, encoding="utf-8")
+        run(command, target, result=1, includes=message)
+        run([sys.executable, "test-vault/verify_receipts.py", "--case", str(hidden_manifest),
+             "--receipts", "receipts"], target, result=1, includes=message)
+    unrelated = "\n| Reference | Owner |\n|---|---|\n| FIXTURE-002 | Example |\n"
+    case_path.write_text(catalog + unrelated, encoding="utf-8")
+    run(command, target, includes="1 unique cases across 1 topics")
+    case_path.write_text(catalog + "\n" + HEADER + DIVIDER + orphan, encoding="utf-8")
+    run(command, target, includes="2 unique cases")
     case_path.write_text(catalog, encoding="utf-8")
     run(workflow_step, target, env=env, includes="Catalog result: PASS")
     case_path.write_text(catalog + "  " + row.replace("| P0 |", "| P9 |"), encoding="utf-8")

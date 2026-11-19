@@ -10,10 +10,14 @@ export GITHUB_RUN_ATTEMPT=${GITHUB_RUN_ATTEMPT:-1}
 export VAULT_EXAMPLE_RECEIPTS="$(mktemp -d)"
 export VAULT_EXAMPLE_EVIDENCE="$(mktemp)"
 example=test-vault/examples/shared-evidence
-node --test "$example/app.test.mjs"
-python3 "$example/check.py"
-python3 test-vault/verify_receipts.py --case "$example/case.json" \
-  --receipts "$VAULT_EXAMPLE_RECEIPTS" --evidence "$VAULT_EXAMPLE_EVIDENCE"
+(
+  result=0
+  node "$example/run-node.mjs" || result=1
+  "${VAULT_EXAMPLE_PYTHON:-python3}" "$example/check.py" || result=1
+  "${VAULT_EXAMPLE_PYTHON:-python3}" test-vault/verify_receipts.py --case "$example/case.json" \
+    --receipts "$VAULT_EXAMPLE_RECEIPTS" --evidence "$VAULT_EXAMPLE_EVIDENCE" || result=1
+  exit "$result"
+)
 ```
 
 In CI, run the verifier even if a suite fails, so the summary shows the missing or failing check. The repository's upgrade rehearsal runs this scenario on a v0.0.2 installation. See the [receipt contract](../../evidence.md).

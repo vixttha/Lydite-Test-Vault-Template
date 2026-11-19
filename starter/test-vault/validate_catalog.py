@@ -12,6 +12,7 @@ HEADER = ["Case", "Area", "Priority", "Suggested implementation", "Expected outc
 SEPARATOR = re.compile(r":?-{3,}:?")
 FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 PRIORITIES = {"P0", "P1", "P2"}
+RAW_HTML = re.compile(r"^ {0,3}<(pre|script|style|textarea)(?=[\s>]|$)", re.I)
 
 
 def table_cells(line):
@@ -29,23 +30,43 @@ def read_cases(path):
     cases = set()
     topics = set()
     in_table = False
+    other_table = False
+    previous_header = None
+    other_header = None
     pending_divider = None
     fence = None
     comment = False
+    raw_tag = None
     for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
         if comment:
-            comment = "-->" not in raw
-            continue
-        marker = FENCE.match(raw)
+            _, end, raw = raw.partition("-->")
+            if not end:
+                continue
+            comment = False
+        marker = FENCE.match(raw) if not raw_tag else None
         if fence:
             if marker and marker[1][0] == fence[0] and len(marker[1]) >= len(fence) and not marker[2].strip():
                 fence = None
             continue
 
+        if raw_tag or (tag := RAW_HTML.match(raw)):
+            raw_tag = raw_tag or tag[1].lower()
+            if f"</{raw_tag}>" in raw.lower():
+                raw_tag = None
+            in_table = other_table = False
+            previous_header = None
+            continue
         indented_code = raw.expandtabs(4).startswith("    ")
+        if not indented_code and not marker:
+            while "<!--" in raw:
+                before, _, tail = raw.partition("<!--")
+                _, end, after = tail.partition("-->")
+                raw = before + after
+                if not end:
+                    comment = True
+                    break
         line = raw.strip()
-        starts_comment = not indented_code and line.startswith("<!--")
-        cells = table_cells(line) if not (marker or indented_code or starts_comment) and "|" in line else []
+        cells = table_cells(line) if not (marker or indented_code) and "|" in line else []
         if pending_divider is not None:
             if len(cells) != len(HEADER) or not all(SEPARATOR.fullmatch(cell) for cell in cells):
                 raise ValueError(f"{path}:{pending_divider}: expected a Markdown table divider after the header")
@@ -53,19 +74,37 @@ def read_cases(path):
             in_table = True
             continue
 
-        if marker:
+        if marker and (marker[1][0] != chr(96) or chr(96) not in marker[2]):
             fence = marker[1]
-        if starts_comment:
-            comment = "-->" not in line
         if not cells:
-            in_table = False
+            in_table = other_table = False
+            previous_header = None
+            other_header = None
             continue
         if cells == HEADER:
             pending_divider = number
+            other_table = False
             continue
+        if not other_table and len(cells) == len(HEADER):
+            differences = [field for actual, field in zip(cells, HEADER) if actual != field]
+            if len(differences) == 1:
+                raise ValueError(f"{path}:{number}: malformed Test Vault header; expected {differences[0]!r}")
+        match = CASE_ID.fullmatch(cells[0])
         if not in_table:
+            if other_table:
+                header_line, fields = other_header
+                matches = sum(actual == expected for actual, expected in zip(fields, HEADER))
+                if match and len(cells) == len(HEADER) and cells[2] in PRIORITIES and matches >= 2:
+                    raise ValueError(f"{path}:{header_line}: malformed Test Vault header for {match.group()}")
+                continue
+            if previous_header and len(previous_header[1]) == len(cells) and all(
+                SEPARATOR.fullmatch(cell) for cell in cells
+            ):
+                other_table, other_header = True, previous_header
+            elif match and len(cells) == len(HEADER):
+                raise ValueError(f"{path}:{number}: case {match.group()} is outside a Test Vault table")
+            previous_header = number, cells
             continue
-        match = CASE_ID.fullmatch(cells[0]) if cells else None
         if len(cells) != len(HEADER) or not all(cells) or not match or cells[2] not in PRIORITIES:
             raise ValueError(f"{path}:{number}: invalid case row")
         case_id = match.group()

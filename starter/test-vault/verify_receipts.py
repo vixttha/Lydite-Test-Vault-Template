@@ -8,12 +8,12 @@ import re
 import subprocess
 from pathlib import Path
 
-from source_commit import source_commit
-from validate_catalog import read_cases
+import source_commit
+import validate_catalog
 
 
 CHECK_ID = re.compile(r"[a-z][a-z0-9-]{0,63}")
-SHA = re.compile(r"[0-9a-f]{40}")
+CHECKOUT_LENGTH = {"sha1": 40, "sha256": 64}
 RUN_ID = re.compile(r"[1-9][0-9]*")
 STATUSES = {"pass", "fail", "skip", "blocked"}
 DEFAULT_CATALOG = Path(__file__).with_name("cases.md")
@@ -47,7 +47,7 @@ def read_case(path, catalog):
     case = read_object(path, raw)
     expect_fields(case, ("schema_version", "case_id", "required_checks", "shared_evidence"), {1, 2})
     case_id, checks = case["case_id"], case["required_checks"]
-    if not isinstance(case_id, str) or case_id not in read_cases(catalog)[0]:
+    if not isinstance(case_id, str) or case_id not in validate_catalog.read_cases(catalog)[0]:
         raise ValueError("case ID must be registered in the selected catalog")
     if (not isinstance(checks, list) or not checks
             or any(not isinstance(check, str) or not CHECK_ID.fullmatch(check) for check in checks)
@@ -79,7 +79,7 @@ def verdict(directory, checks, expected):
     if directory.is_symlink() or not directory.is_dir():
         issues.append("Receipt directory is missing or invalid.")
     else:
-        entries = sorted(directory.glob("*.json"))
+        entries = sorted(path for path in directory.iterdir() if path.name.endswith(".json"))
         for path in entries:
             if path.is_symlink() or not path.is_file():
                 issues.append("Found an unreadable or invalid receipt.")
@@ -146,9 +146,14 @@ def main():
         case, plan_sha = read_case(args.case, args.catalog)
         if not RUN_ID.fullmatch(args.run_id or "") or not RUN_ID.fullmatch(args.attempt or ""):
             raise ValueError("run ID and attempt must be positive decimal strings")
-        checkout = source_commit(Path.cwd(), (Path(__file__), args.catalog))
-        if not SHA.fullmatch(checkout):
-            raise ValueError("checkout must be a full Git SHA")
+        checkout = source_commit.source_commit(
+            Path.cwd(), (Path(__file__), Path(source_commit.__file__),
+                         Path(validate_catalog.__file__), args.catalog),
+        )
+        object_format = source_commit.git(Path.cwd(), "rev-parse", "--show-object-format")
+        length = CHECKOUT_LENGTH.get(object_format)
+        if length is None or not re.fullmatch(rf"[0-9a-f]{{{length}}}", checkout):
+            raise ValueError(f"checkout must be a full Git object ID for {object_format}")
         if case["shared_evidence"] != (args.evidence is not None):
             raise ValueError("evidence argument must match the case's shared_evidence setting")
         expected = {
