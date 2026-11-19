@@ -40,7 +40,7 @@ def read_cases(path):
 
         indented_code = raw.expandtabs(4).startswith("    ")
         line = raw.strip()
-        cells = table_cells(line) if not indented_code and "|" in line else []
+        cells = table_cells(line) if not marker and not indented_code and "|" in line else []
         if pending_divider is not None:
             if len(cells) != len(HEADER) or not all(SEPARATOR.fullmatch(cell) for cell in cells):
                 raise ValueError(f"{path}:{pending_divider}: expected a Markdown table divider after the header")

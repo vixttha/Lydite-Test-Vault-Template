@@ -2,12 +2,13 @@ from contextlib import redirect_stdout
 import io
 import json
 import os
+import subprocess
 import sys
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from inventory import execute_case, print_inventory, read_inventory
+from inventory import checkout_identity, execute_case, print_inventory, read_inventory
 from native_outcomes import passed_tests
 
 
@@ -129,3 +130,30 @@ class CommandOutcomeTests(unittest.TestCase):
                     actual, detail = execute_case({"commands": [command]}, directory, os.environ, timeout=timeout)
                     self.assertEqual(actual, status)
                     self.assertIn(reason, detail)
+
+
+class CheckoutIdentityTests(unittest.TestCase):
+    def test_exact_identity_requires_clean_inputs_and_the_intended_root(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            git = ["git", "-C", directory]
+            self.assertEqual(checkout_identity(root)["state"], "UNVERSIONED")
+            subprocess.run([*git, "init", "-q"], check=True)
+            test = root / "fixture.py"
+            test.write_text("assert True\n", encoding="utf-8")
+            subprocess.run([*git, "add", "."], check=True)
+            subprocess.run(
+                [*git, "-c", "user.name=Test Vault Fixture", "-c", "user.email=fixture@example.invalid",
+                 "-c", "commit.gpgsign=false", "commit", "-qm", "Record fixture"],
+                check=True,
+            )
+            clean = checkout_identity(root)
+            self.assertEqual(clean["state"], "CLEAN")
+            self.assertEqual(clean["commit"], clean["base_commit"])
+            test.write_text("assert False\n", encoding="utf-8")
+            self.assertEqual(checkout_identity(root), {
+                "state": "MODIFIED", "commit": None, "base_commit": clean["commit"],
+            })
+            nested = root / "extracted-vault"
+            nested.mkdir()
+            self.assertEqual(checkout_identity(nested)["state"], "UNVERSIONED")

@@ -58,6 +58,9 @@ def verify(output, work):
     check("pass", commit(project, "Exercise the consumer implementation"), {"PYTHON-001": "PASS"}, 0)
 
     original_app = app.read_text(encoding="utf-8")
+    run(inventory, project, includes="1 declared cases", env=env)
+    if run(["git", "status", "--porcelain"], project):
+        raise AssertionError("Verification left generated files in the consumer checkout")
     app.write_text("def debit(balance, amount):\n    return balance - amount\n", encoding="utf-8")
     metadata = language / "metadata.json"
     manifest = json.loads(metadata.read_text(encoding="utf-8"))

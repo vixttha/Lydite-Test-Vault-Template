@@ -160,14 +160,17 @@ jobs:
           map="Graphify HQ/v0.0.3/graph.json"
           trap 'git restore -- "$archive" "$map"' EXIT
           printf '\nSynthetic archive drift\n' >> "$archive"
-          if python tools/graphify/version_maps.py "$RUNNER_TEMP/lydite-bad-archive" --check; then
+          log="$RUNNER_TEMP/lydite-map-drift.log"
+          if python tools/graphify/version_maps.py "$RUNNER_TEMP/lydite-bad-archive" --check > "$log" 2>&1; then
             exit 1
           fi
+          grep -F "archived bytes differ for test-vault/README.md" "$log"
           git restore -- "$archive"
           printf '\n' >> "$map"
-          if python tools/graphify/version_maps.py "$RUNNER_TEMP/lydite-bad-map" --check; then
+          if python tools/graphify/version_maps.py "$RUNNER_TEMP/lydite-bad-map" --check > "$log" 2>&1; then
             exit 1
           fi
+          grep -F "Changed: Graphify HQ/v0.0.3/graph.json" "$log"
 
   release-candidate:
     name: Record candidate source and validation
