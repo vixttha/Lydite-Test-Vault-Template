@@ -93,7 +93,13 @@ def read_archive(tag, record):
         data = path.read_bytes()
         if path.is_symlink() or hashlib.sha1(f"blob {len(data)}\0".encode() + data).hexdigest() != digest:
             raise ValueError(f"{tag}: archived bytes differ for {name}")
-        sources[name] = (path.relative_to(ROOT).as_posix(), digest, data.decode("utf-8"))
+        content = None
+        if path.suffix in {".md", ".py"}:
+            try:
+                content = data.decode("utf-8")
+            except UnicodeError as error:
+                raise ValueError(f"{tag}: cannot decode archived text {name}: {error}") from error
+        sources[name] = (path.relative_to(ROOT).as_posix(), digest, content)
     return sources
 
 
