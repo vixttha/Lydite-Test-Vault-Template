@@ -88,7 +88,11 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends lua5.4
           bash --version
-          dotnet --version
+          for language in csharp fsharp; do
+            sdk="$(cd "languages/$language" && dotnet --version)"
+            [[ "$sdk" == 8.0.* ]]
+            printf '%s selected .NET SDK %s\n' "$language" "$sdk"
+          done
           g++ --version
           ghc --version
           go version
