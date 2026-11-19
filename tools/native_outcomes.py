@@ -6,6 +6,7 @@ import os
 import re
 import sys
 import unittest
+from pathlib import Path
 
 
 UNITTEST_RESULT = "LYDITE_UNITTEST_RESULTS "
@@ -22,6 +23,20 @@ TAP_RESULT = re.compile(r"^( *)(ok|not ok) [0-9]+(?: - (.*))?$")
 TAP_DIRECTIVE = re.compile(r"\s+#\s*(skip|todo)(?:\s|$)", re.I)
 TAP_NAME_ESCAPE = re.compile(r"\\([\\#])")
 
+
+
+def node_command(command, result):
+    reporter = Path(__file__).with_name("node_outcomes.mjs").resolve().as_uri()
+    index = command.index("--test-reporter=tap")
+    return [*command[:index], "--test-reporter=tap", "--test-reporter-destination=stdout",
+            f"--test-reporter={reporter}", f"--test-reporter-destination={result}", *command[index + 1:]]
+
+
+def node_results(output):
+    if output.startswith("{"):
+        return [(entry["path"], entry["outcome"]) for entry in json.loads(output)["leaves"]]
+    return [([name], {"ok": "pass", "skip": "skip"}.get(status, "fail"))
+            for name, status in node_leaf_results(output)]
 
 def node_leaf_results(output):
     """Node TAP prints child results before the parent result at a lower indentation."""
@@ -42,10 +57,6 @@ def node_leaf_results(output):
         if directive:
             name = (title or "")[:directive.start()].strip()
         yield TAP_NAME_ESCAPE.sub(r"\1", name), directive[1].lower() if directive else status
-
-
-def node_leaf_outcomes(output):
-    return (status for _, status in node_leaf_results(output))
 
 
 def unittest_command(command):
@@ -85,7 +96,7 @@ def skipped_tests(runner, output):
     if runner == "go-json":
         return sum(bool(event.get("Test") and event.get("Action") == "skip") for event in go_events(output))
     if runner == "node-tap":
-        return sum(outcome == "skip" for outcome in node_leaf_outcomes(output))
+        return sum(outcome == "skip" for _, outcome in node_results(output))
     if runner == "unittest":
         return unittest_outcomes(output)[1]
     return sum(map(int, re.findall(r"^test result: ok\. .*? (\d+) ignored;", output, re.M)))
@@ -98,7 +109,7 @@ def passed_tests(runner, output):
             for event in go_events(output) if isinstance(event, dict)
         )
     if runner == "node-tap":
-        return sum(outcome == "ok" for outcome in node_leaf_outcomes(output))
+        return sum(outcome == "pass" for _, outcome in node_results(output))
     if runner == "rust-libtest":
         return int(matches[-1]) if (matches := re.findall(
             r"^test result: ok\. (\d+) passed;", output, re.M,
@@ -116,8 +127,7 @@ def selected_outcome(runner, output, name, source):
         outcomes = [event["Action"] for event in events
                     if event.get("Test") == name and event.get("Action") in ("pass", "skip", "fail")]
     elif runner == "node-tap":
-        outcomes = [{"ok": "pass", "skip": "skip"}.get(status, "fail")
-                    for title, status in node_leaf_results(output) if title == name]
+        outcomes = [status for path, status in node_results(output) if path[-1] == name]
     elif runner == "rust-libtest":
         outcomes = [{"ok": "pass", "ignored": "skip", "FAILED": "fail"}[status]
                     for status in re.findall(rf"^test {re.escape(name)} \.\.\. (ok|ignored|FAILED)(?:$|,)", output, re.M)]

@@ -10,7 +10,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path, PurePosixPath
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 
-from native_outcomes import NATIVE_RUNNERS, passed_tests, selected_outcome, skipped_tests, unittest_command
+from native_outcomes import NATIVE_RUNNERS, node_command, passed_tests, selected_outcome, skipped_tests, unittest_command
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -263,12 +263,16 @@ def execute_case(case, folder, env, *, timeout=180, guard=None, command_results=
     commands = case["commands"]
     native_index = case.get("native_command_index", len(commands) - 1)
     with TemporaryDirectory(prefix="lydite-") as temp:
+        node_result = Path(temp) / "node-result.json"
         for index, argv in enumerate(commands):
             if guard:
                 guard()
             command = [arg.replace("{tmp}", temp) for arg in argv]
-            if case.get("native_runner") == "unittest" and index == native_index:
-                command = unittest_command(command)
+            if index == native_index:
+                if case.get("native_runner") == "unittest":
+                    command = unittest_command(command)
+                elif case.get("native_runner") == "node-tap":
+                    command = node_command(command, node_result)
             status, reason, exit_code, output = command_status(command, folder, env, timeout)
             if command_results is not None:
                 command_results[index].update(outcome=status, detail=reason, exit_code=exit_code)
@@ -277,7 +281,13 @@ def execute_case(case, folder, env, *, timeout=180, guard=None, command_results=
             if status != "PASS":
                 return status, reason
             if index == native_index:
-                native_output = output
+                if case.get("native_runner") == "node-tap":
+                    try:
+                        native_output = node_result.read_text(encoding="utf-8")
+                    except OSError:
+                        return "FAIL", "Node did not provide a structured test result"
+                else:
+                    native_output = output
     if native := case.get("native_runner"):
         try:
             if name := case.get("native_test"):
