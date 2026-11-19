@@ -44,6 +44,12 @@ class ArchiveTests(unittest.TestCase):
             index = (Path(directory) / "graph/README.md").read_text()
             self.assertIn("[getting started.md](../../versions/v0.0.1/getting%20started.md)", index)
 
+    def test_archive_directory_links_resolve_to_their_readme(self):
+        with TemporaryDirectory() as directory:
+            graph = self.archived_graph(directory, "[Setup](setup/)\n", {"setup/README.md": "# Setup\n"})
+            self.assertTrue(any(edge["relation"] == "links_to" and edge["target"] == "file:setup/README.md"
+                                for edge in graph["links"]))
+
     def test_binary_and_latin1_sources_keep_pinned_bytes(self):
         with TemporaryDirectory() as directory:
             root = Path(directory) / "source-repo"

@@ -151,6 +151,10 @@ def build_map(tag, record, sources, output):
                 if parsed.scheme or parsed.netloc or not parsed.path or parsed.path.startswith("/"):
                     continue
                 target = posixpath.normpath(posixpath.join(posixpath.dirname(name), unquote(parsed.path)))
+                if target not in sources:
+                    directory = posixpath.join(target, "README.md")
+                    if directory in sources:
+                        target = directory
                 if target in sources and target != name:
                     edge(key, file_id(target), "links_to", path)
         elif name.endswith(".py"):
