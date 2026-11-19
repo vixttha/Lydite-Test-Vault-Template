@@ -10,6 +10,8 @@ import sys
 from tempfile import TemporaryDirectory
 from textwrap import dedent
 
+from check_doc_links import validate_paths
+
 
 ROOT = Path(__file__).resolve().parents[1]
 STARTER = ROOT / "starter"
@@ -95,11 +97,20 @@ def copy_and_check(sample, target):
     run(workflow_step, target, env=env, includes="Catalog result: PASS")
     if f"Checkout: {checkout}" not in summary.read_text(encoding="utf-8"):
         raise RuntimeError("Workflow summary omitted the tested checkout")
-    for name in ("README.md", "case-and-receipt.md"):
-        path = target / "test-vault" / name
-        for link in re.findall(r"\]\(([^)]+)\)", path.read_text(encoding="utf-8")):
-            if not (link.startswith(("https://", "#")) or (path.parent / link).is_file()):
-                raise RuntimeError(f"{path}: unresolved link {link}")
+    paths = [target / "test-vault" / name for name in ("README.md", "case-and-receipt.md")]
+    problems = validate_paths(target, paths)
+    if problems:
+        raise RuntimeError("\n".join(problems))
+    readme = paths[0]
+    original = readme.read_text(encoding="utf-8")
+    valid = "\n[Case format](evidence.md#case-manifest-v2)\n"
+    readme.write_text(original + valid, encoding="utf-8")
+    if validate_paths(target, paths):
+        raise AssertionError("A working copied section link was rejected")
+    readme.write_text(original + valid.replace("case-manifest-v2", "absent-section"), encoding="utf-8")
+    if not any("no matching heading" in issue for issue in validate_paths(target, paths)):
+        raise AssertionError("A missing copied section was accepted")
+    readme.write_text(original, encoding="utf-8")
 
     command = [sys.executable, str(VALIDATOR)]
     run(command, target, includes="1 unique cases across 1 topics")
