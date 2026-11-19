@@ -167,11 +167,15 @@ class EvidenceResult(unittest.TextTestResult):
             self.passed.add(test)
 
 
+class EvidenceRunner(unittest.TextTestRunner):
+    resultclass = EvidenceResult
+
+
 if __name__ == "__main__":
     if not sys.flags.safe_path:
         sys.path[0] = os.getcwd()
     program = unittest.main(
-        module=None, testRunner=unittest.TextTestRunner(resultclass=EvidenceResult), exit=False,
+        module=None, testRunner=EvidenceRunner, exit=False,
     )
     result = program.result
     passed = [entry for test in result.passed if (entry := unittest_identity(test))]

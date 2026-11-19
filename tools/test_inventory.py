@@ -248,6 +248,26 @@ class NativeOutcomeTests(unittest.TestCase):
                 command = [sys.executable, *argv, "-m", "unittest", "isolated_fixture"]
                 self.assertEqual(execute_case({**case, "commands": [command]}, directory, os.environ)[0], expected)
 
+    def test_unittest_wrapper_honors_failfast_and_buffer(self):
+        with TemporaryDirectory() as directory:
+            test = Path(directory) / "fixture.py"
+            test.write_text(
+                "import unittest\nclass Tests(unittest.TestCase):\n"
+                "    def test_first(self): self.fail('controlled failure')\n"
+                "    def test_second(self): print('second method ran')\n"
+            )
+            for args, expected, hidden in ((["-f"], "FAIL", "second method ran"),
+                                           (["-b", "fixture.Tests.test_second"], "PASS", "second method ran")):
+                command = [sys.executable, "-m", "unittest", *args]
+                if len(args) == 1:
+                    command.append("fixture")
+                output = io.StringIO()
+                case = {"native_runner": "unittest", "test": test.name,
+                        "native_test": "Tests.test_second", "commands": [command]}
+                with redirect_stdout(output):
+                    self.assertEqual(execute_case(case, directory, os.environ)[0], expected)
+                self.assertNotIn(hidden, output.getvalue())
+
     def test_unittest_records_passes_alongside_setup_and_subtest_skips(self):
         with TemporaryDirectory() as directory:
             test = Path(directory) / "test_fixture.py"
