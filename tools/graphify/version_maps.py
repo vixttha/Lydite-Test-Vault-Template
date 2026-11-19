@@ -113,7 +113,7 @@ def file_id(name):
 
 def markdown_sections(content):
     fence = None
-    for number, line in enumerate(content.splitlines(), 1):
+    for number, line in enumerate(content.split("\n"), 1):
         delimiter = FENCE.match(line)
         if delimiter:
             token = delimiter[1]

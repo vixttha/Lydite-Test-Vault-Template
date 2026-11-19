@@ -8,10 +8,14 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from version_maps import build_map, publish_batch, read_archive, verify
+from version_maps import build_map, markdown_sections, publish_batch, read_archive, verify
 
 
 class ArchiveTests(unittest.TestCase):
+    def test_unicode_separator_does_not_shift_physical_heading_lines(self):
+        self.assertEqual(list(markdown_sections("# First\u2028still first\n# Second\n"))[-1],
+                         (2, 1, "Second"))
+
     def test_binary_and_latin1_sources_keep_pinned_bytes(self):
         with TemporaryDirectory() as directory:
             root = Path(directory) / "source-repo"
