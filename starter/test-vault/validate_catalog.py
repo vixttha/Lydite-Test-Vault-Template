@@ -30,7 +30,8 @@ def read_cases(path):
     topics = set()
     in_table = False
     other_table = False
-    previous_width = None
+    previous_header = None
+    other_header = None
     pending_divider = None
     fence = None
     comment = False
@@ -61,7 +62,8 @@ def read_cases(path):
             comment = "-->" not in line
         if not cells:
             in_table = other_table = False
-            previous_width = None
+            previous_header = None
+            other_header = None
             continue
         if cells == HEADER:
             pending_divider = number
@@ -74,12 +76,18 @@ def read_cases(path):
         match = CASE_ID.fullmatch(cells[0])
         if not in_table:
             if other_table:
+                header_line, fields = other_header
+                matches = sum(actual == expected for actual, expected in zip(fields, HEADER))
+                if match and len(cells) == len(HEADER) and cells[2] in PRIORITIES and matches >= 2:
+                    raise ValueError(f"{path}:{header_line}: malformed Test Vault header for {match.group()}")
                 continue
-            if previous_width == len(cells) and all(SEPARATOR.fullmatch(cell) for cell in cells):
-                other_table = True
+            if previous_header and len(previous_header[1]) == len(cells) and all(
+                SEPARATOR.fullmatch(cell) for cell in cells
+            ):
+                other_table, other_header = True, previous_header
             elif match and len(cells) == len(HEADER):
                 raise ValueError(f"{path}:{number}: case {match.group()} is outside a Test Vault table")
-            previous_width = len(cells)
+            previous_header = number, cells
             continue
         if len(cells) != len(HEADER) or not all(cells) or not match or cells[2] not in PRIORITIES:
             raise ValueError(f"{path}:{number}: invalid case row")
