@@ -158,6 +158,8 @@ jobs:
           python --version
           ruby --version
           rustc --version
+      - name: Run copied receipt filename controls
+        run: python -m unittest discover -s tools -p 'test_starter_receipts.py'
       - name: Run language examples
         id: run-cases
         shell: bash
