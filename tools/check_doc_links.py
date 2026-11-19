@@ -2,21 +2,14 @@
 
 import argparse
 import os
-import re
 import subprocess
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
-from markdown_docs import MARKDOWN, link_targets
+from markdown_docs import MARKDOWN, heading_anchors, link_targets
 
 
 ROOT = Path(__file__).resolve().parents[1]
-def anchors(text):
-    for line in text.splitlines():
-        if heading := re.match(r"^#{1,6} (.+?)\s*#*\s*$", line):
-            yield re.sub(r"[^\w\s-]", "", heading[1].lower()).replace(" ", "-")
-
-
 def maintained_paths(root, available):
     paths = set(available)
     homepage = next((root / route for route in (".github/README.md", "README.md", "docs/README.md")
@@ -45,7 +38,7 @@ def validate_paths(root, paths, *, read=read_text, exists=Path.exists, resolve=P
                 target = resolve(parent / decoded.lstrip("/")) if decoded else path
                 if not target.is_relative_to(root) or not exists(target):
                     issues.append(f"{where}: {raw} has no destination")
-                elif link.fragment and target.suffix.lower() == ".md" and unquote(link.fragment) not in anchors(read(target)):
+                elif link.fragment and target.suffix.lower() == ".md" and unquote(link.fragment) not in heading_anchors(MARKDOWN.parse(read(target))):
                     issues.append(f"{where}: {raw} has no matching heading")
             except (OSError, ValueError) as error:
                 issues.append(f"{where}: {raw!r} is invalid: {error}")

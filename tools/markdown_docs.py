@@ -59,3 +59,36 @@ def link_targets(tokens):
                 yield line, child.attrGet("src")
             elif child.type == "html_inline":
                 yield from ((line + offset, href) for offset, href in html_navigation(child.content).links)
+
+
+def headings(tokens):
+    for token, inline in zip(tokens, tokens[1:]):
+        if token.type == "heading_open" and inline.type == "inline":
+            title = "".join(
+                " " if child.type in {"softbreak", "hardbreak"} else child.content
+                for child in inline.children or () if child.type in
+                {"text", "code_inline", "image", "softbreak", "hardbreak"}
+            )
+            yield token.map[0] + 1, int(token.tag[1:]), title
+
+
+def heading_anchors(tokens):
+    import re
+
+    used = set()
+    for _, _, title in headings(tokens):
+        slug = re.sub(r"[^\w -]", "", title.lower()).replace(" ", "-")
+        if not slug:
+            continue
+        candidate, number = slug, 1
+        while candidate in used:
+            candidate = f"{slug}-{number}"
+            number += 1
+        used.add(candidate)
+        yield candidate
+    for token in tokens:
+        if token.type == "html_block":
+            yield from html_navigation(token.content).anchors
+        for child in token.children or ():
+            if child.type == "html_inline":
+                yield from html_navigation(child.content).anchors

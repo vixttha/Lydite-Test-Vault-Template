@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from check_doc_links import check_tree, main, validate_paths
 
-from markdown_docs import MARKDOWN, link_targets
+from markdown_docs import MARKDOWN, heading_anchors, link_targets
 
 
 class MarkdownNavigationTests(unittest.TestCase):
@@ -54,3 +54,10 @@ class MarkdownNavigationTests(unittest.TestCase):
             paths, problems = check_tree(root, "HEAD")
             self.assertEqual(paths, [readme])
             self.assertIn("draft.md has no destination", problems[0])
+
+    def test_rendered_heading_anchors_are_unique_and_visible(self):
+        text = ("# Setup\n\n# Setup\n\n# Setup-1\n\n"
+                + chr(96) * 3 + "\n# Hidden\n" + chr(96) * 3
+                + "\n\n<!--\n# Comment\n-->\n\n# **Quick** Start\n")
+        self.assertEqual(list(heading_anchors(MARKDOWN.parse(text))),
+                         ["setup", "setup-1", "setup-1-1", "quick-start"])
