@@ -1,6 +1,6 @@
 # Upgrade from v0.0.2
 
-Review file conflicts before copying from the v0.0.3 starter. To opt in while keeping your current catalog and workflow, copy `test-vault/verify_receipts.py` and `test-vault/evidence.md`. Copy `test-vault/examples/` if you want the example, and copy this guide alongside the evidence documentation. The verifier reuses your existing v0.0.2 catalog validator. Keep using the same catalog table, optional topics registry, and project test commands.
+Review file conflicts before copying from the v0.0.3 starter. To opt in while keeping your current catalog and workflow, copy `test-vault/verify_receipts.py`, `test-vault/source_commit.py`, and `test-vault/evidence.md`. Copy `test-vault/examples/` if you want the example, and copy this guide alongside the evidence documentation. The verifier reuses your existing v0.0.2 catalog validator. Keep using the same catalog table, optional topics registry, and project test commands.
 
 Pick one registered case, define its required checks, and run the new verdict after the suites. Review the test receipt for the actual checkout and attempt. A failed or missing required check should fail the combined verdict even when the catalog passes.
 

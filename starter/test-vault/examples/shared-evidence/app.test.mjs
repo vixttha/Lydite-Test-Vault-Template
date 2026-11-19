@@ -15,7 +15,10 @@ test('quote CLI returns the expected total and records its output', () => {
     schema_version: 1,
     case_id,
     check_id: 'node-test',
-    checkout_sha: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
+    checkout_sha: execFileSync(process.env.VAULT_EXAMPLE_PYTHON || 'python3', [
+      fileURLToPath(new URL('../../source_commit.py', import.meta.url)),
+      app, fileURLToPath(import.meta.url), fileURLToPath(new URL('./case.json', import.meta.url)),
+    ], { encoding: 'utf8' }).trim(),
     run_id: process.env.GITHUB_RUN_ID,
     attempt: process.env.GITHUB_RUN_ATTEMPT,
     environment: { os: process.platform, runtime: process.version },

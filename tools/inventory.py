@@ -132,12 +132,29 @@ def runtime_version(probe, folder, env):
     return (result.stdout or result.stderr).splitlines()[0] if result.stdout or result.stderr else None
 
 
+def checkout_identity(root):
+    def git(*args):
+        return subprocess.check_output(
+            ["git", "-C", str(root), *args], text=True, stderr=subprocess.DEVNULL,
+        ).strip()
+
+    try:
+        if Path(git("rev-parse", "--show-toplevel")).resolve() != root.resolve():
+            return {"state": "UNVERSIONED", "commit": None, "base_commit": None}
+        base = git("rev-parse", "HEAD")
+        dirty = git("status", "--porcelain=v1", "--untracked-files=all", "--", ".")
+    except (OSError, subprocess.CalledProcessError):
+        return {"state": "UNVERSIONED", "commit": None, "base_commit": None}
+    return {"state": "MODIFIED" if dirty else "CLEAN", "commit": None if dirty else base, "base_commit": base}
+
+
 def run_cases(inventory, languages, evidence=None):
-    sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    source = checkout_identity(ROOT)
     env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "DOTNET_CLI_TELEMETRY_OPTOUT": "1"}
     report = {
         "schema_version": 1,
-        "checkout_sha": sha,
+        "checkout_sha": source["commit"],
+        "source": source,
         "run_id": env.get("GITHUB_RUN_ID"),
         "attempt": env.get("GITHUB_RUN_ATTEMPT"),
         "job": env.get("GITHUB_JOB"),
@@ -148,14 +165,17 @@ def run_cases(inventory, languages, evidence=None):
         },
         "cases": [],
     }
-    print(f"Checkout {sha} | run {report['run_id'] or 'local'} | attempt {report['attempt'] or 'n/a'}", flush=True)
+    print(f"Checkout {source['commit'] or source['state']} | run {report['run_id'] or 'local'}"
+          f" | attempt {report['attempt'] or 'n/a'}", flush=True)
     for slug in languages:
         manifest = inventory[slug]
         folder = ROOT / "languages" / slug
         runtime = runtime_version(manifest.get("runtime_probe"), folder, env)
         for case in manifest["cases"]:
             print(f'{case["id"]} | {case["purpose"]}', flush=True)
-            if manifest.get("runtime_probe") and runtime is None:
+            if env.get("GITHUB_ACTIONS") == "true" and source["state"] != "CLEAN":
+                status, reason = "BLOCKED", "hosted evidence requires a clean Git checkout at the Vault root"
+            elif manifest.get("runtime_probe") and runtime is None:
                 status, reason = "BLOCKED", "declared runtime version probe failed"
             else:
                 status, reason = execute_case(case, folder, env)

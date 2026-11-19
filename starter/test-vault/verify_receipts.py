@@ -8,6 +8,7 @@ import re
 import subprocess
 from pathlib import Path
 
+from source_commit import source_commit
 from validate_catalog import read_cases
 
 
@@ -142,7 +143,7 @@ def main():
         case = read_case(args.case, args.catalog)
         if not RUN_ID.fullmatch(args.run_id or "") or not RUN_ID.fullmatch(args.attempt or ""):
             raise ValueError("run ID and attempt must be positive decimal strings")
-        checkout = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+        checkout = source_commit(Path.cwd(), (Path(__file__), args.catalog))
         if not SHA.fullmatch(checkout):
             raise ValueError("checkout must be a full Git SHA")
         if case["shared_evidence"] != (args.evidence is not None):

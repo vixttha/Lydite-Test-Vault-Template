@@ -1,6 +1,6 @@
 # Verify execution receipts
 
-Use a receipt when a test suite can record a result for a catalog case. The catalog check and the execution verdict can run alongside your existing test commands. This feature uses Python 3.12 and Git.
+Use a receipt when a test suite can record a result for a catalog case. The catalog check and the execution verdict can run alongside your existing test commands. This feature uses Python 3.12 and Git. Run from the intended repository root after committing tracked source changes. The bundled producers and verifier require their source files and the selected catalog to be tracked.
 
 1. Keep the case ID in the existing catalog. Declare the checks that must pass before any suites run.
 2. Have each suite write one JSON receipt to an empty directory for that case and run attempt. Use the actual checkout from `git rev-parse HEAD` and the run and attempt provided by CI. Keep previous attempts in separate directories.

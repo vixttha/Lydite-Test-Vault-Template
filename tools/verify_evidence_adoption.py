@@ -82,7 +82,7 @@ def verify_upgrade(work):
         "import assert from 'node:assert/strict';\nassert.equal(6 * 7, 42);\n", encoding="utf-8",
     )
     run(["node", "--test", "existing_test.mjs"], project, includes="pass 1")
-    for file in ("verify_receipts.py", "evidence.md", "UPGRADE.md"):
+    for file in ("verify_receipts.py", "source_commit.py", "evidence.md", "UPGRADE.md"):
         shutil.copy2(STARTER / "test-vault" / file, project / "test-vault" / file)
     shutil.copytree(STARTER / EXAMPLE, project / EXAMPLE)
     case_file.write_bytes(old_cases.rstrip(b"\n") + b"\n" + CASE_ROW.encode())
@@ -99,6 +99,7 @@ def verify_upgrade(work):
     env = {
         **os.environ, "GITHUB_RUN_ID": os.environ.get("GITHUB_RUN_ID", "1"),
         "GITHUB_RUN_ATTEMPT": os.environ.get("GITHUB_RUN_ATTEMPT", "1"),
+        "VAULT_EXAMPLE_PYTHON": sys.executable,
         "VAULT_EXAMPLE_EVIDENCE": str(observation), "VAULT_EXAMPLE_RECEIPTS": str(directory),
     }
     command = [

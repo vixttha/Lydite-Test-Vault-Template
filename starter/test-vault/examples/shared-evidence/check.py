@@ -5,6 +5,7 @@ import json
 import os
 import platform
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -17,10 +18,15 @@ def main():
         "total_cents": sum(unit_cents for _ in range(quantity)),
     }
     passed = actual == expected
-    case = json.loads(Path(__file__).with_name("case.json").read_text(encoding="utf-8"))
+    script = Path(__file__).resolve()
+    manifest = script.with_name("case.json")
+    case = json.loads(manifest.read_text(encoding="utf-8"))
+    checkout = subprocess.check_output(
+        [sys.executable, script.parents[2] / "source_commit.py", script, manifest], text=True,
+    ).strip()
     receipt = {
         "schema_version": 1, "case_id": case["case_id"], "check_id": "python-check",
-        "checkout_sha": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
+        "checkout_sha": checkout,
         "run_id": os.environ["GITHUB_RUN_ID"], "attempt": os.environ["GITHUB_RUN_ATTEMPT"],
         "environment": {"os": platform.system(), "runtime": platform.python_version()},
         "status": "pass" if passed else "fail",
