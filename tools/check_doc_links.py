@@ -30,10 +30,18 @@ def anchors(path):
             yield re.sub(r"[^\w\s-]", "", heading[1].lower()).replace(" ", "-")
 
 
+def maintained_paths(root, available):
+    paths = set(available)
+    homepage = next((root / route for route in (".github/README.md", "README.md", "docs/README.md")
+                     if root / route in paths), None)
+    return sorted(path for path in paths if path == homepage or (
+        path == root / "README.md" or path == root / "versions/README.md"
+        or (path.relative_to(root).parts[0] in {"docs", "starter", "languages", "Graphify HQ"})
+    ))
+
+
 def main():
-    maintained = [ROOT / "README.md", ROOT / "versions/README.md"]
-    for directory in ("docs", "starter", "languages", "Graphify HQ"):
-        maintained.extend((ROOT / directory).rglob("*.md"))
+    maintained = maintained_paths(ROOT, ROOT.rglob("*.md"))
     issues = []
     for path in sorted(maintained):
         for raw in links(path):
