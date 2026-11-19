@@ -155,6 +155,25 @@ def verify_readme_block(project, work, env):
             env={**env, "GITHUB_STEP_SUMMARY": "", "TMPDIR": str(work)})
         print(f"Verified the copied README command for {name}.")
 
+def verify_sha256_checkout(project, work, command, directory, observation, env):
+    target = work / "sha256"
+    shutil.copytree(project, target, ignore=shutil.ignore_patterns(".git", "__pycache__"))
+    run(["git", "init", "-q", "--object-format=sha256"], target)
+    run(["git", "add", "."], target)
+    run(["git", "-c", "user.name=Test Vault Fixture", "-c", "user.email=fixture@example.invalid",
+         "-c", "commit.gpgsign=false", "commit", "-qm", "SHA-256 fixture"], target)
+    checkout = run(["git", "rev-parse", "HEAD"], target)
+    receipts = work / "sha256-receipts"
+    receipts.mkdir()
+    for path in directory.glob("*.json"):
+        write_json(receipts / path.name, {**json.loads(path.read_bytes()), "checkout_sha": checkout})
+    args = [*command[:4], "--receipts", str(receipts), "--evidence", str(observation)]
+    run(args, target, includes="Overall: PASS", env={**env, "GITHUB_STEP_SUMMARY": ""})
+    node = receipts / "node.json"
+    write_json(node, {**json.loads(node.read_bytes()), "checkout_sha": "0" * 64})
+    run(args, target, result=1, includes="checkout_sha does not match", env={**env, "GITHUB_STEP_SUMMARY": ""})
+
+
 def verify_upgrade(work):
     project = work / "project"
     previous = ROOT / "versions/v0.0.2/starter"
@@ -202,6 +221,7 @@ def verify_upgrade(work):
         raise AssertionError("Every example suite must also exit successfully")
     verify_readme_block(project, work, env)
     verify_missing_helpers(project, work, command, directory, observation, env)
+    verify_sha256_checkout(project, work, command, directory, observation, env)
     test_receipts(project, env, command, directory, observation)
     print("Verified v0.0.2 opt-in alongside the existing catalog, workflow, and project test.")
 

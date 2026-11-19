@@ -13,7 +13,7 @@ import validate_catalog
 
 
 CHECK_ID = re.compile(r"[a-z][a-z0-9-]{0,63}")
-SHA = re.compile(r"[0-9a-f]{40}")
+CHECKOUT_LENGTH = {"sha1": 40, "sha256": 64}
 RUN_ID = re.compile(r"[1-9][0-9]*")
 STATUSES = {"pass", "fail", "skip", "blocked"}
 DEFAULT_CATALOG = Path(__file__).with_name("cases.md")
@@ -150,8 +150,10 @@ def main():
             Path.cwd(), (Path(__file__), Path(source_commit.__file__),
                          Path(validate_catalog.__file__), args.catalog),
         )
-        if not SHA.fullmatch(checkout):
-            raise ValueError("checkout must be a full Git SHA")
+        object_format = source_commit.git(Path.cwd(), "rev-parse", "--show-object-format")
+        length = CHECKOUT_LENGTH.get(object_format)
+        if length is None or not re.fullmatch(rf"[0-9a-f]{{{length}}}", checkout):
+            raise ValueError(f"checkout must be a full Git object ID for {object_format}")
         if case["shared_evidence"] != (args.evidence is not None):
             raise ValueError("evidence argument must match the case's shared_evidence setting")
         expected = {
