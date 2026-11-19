@@ -15,7 +15,7 @@ import tokenize
 from importlib.metadata import version
 from pathlib import Path, PurePosixPath
 from tempfile import TemporaryDirectory
-from urllib.parse import unquote, urlsplit
+from urllib.parse import quote, unquote, urlsplit
 
 from graphify.build import build_from_json
 from graphify.export import to_json
@@ -181,7 +181,9 @@ def build_map(tag, record, sources, output):
     lines = [f"# Test Vault template {tag}", "",
              "[Graphify map](graph.json) · [Source receipt](receipt.json) · [All versions](../README.md)", "",
              "## Indexed files", ""]
-    lines.extend(f"- [{name}](../../{entry['archive_path']})" for name, entry in receipt["sources"].items())
+    for name, entry in receipt["sources"].items():
+        label = name.replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
+        lines.append(f"- [{label}](../../{quote(entry['archive_path'], safe='/')})")
     (output / "README.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     return receipt
 

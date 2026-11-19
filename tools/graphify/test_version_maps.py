@@ -38,6 +38,12 @@ class ArchiveTests(unittest.TestCase):
         self.assertEqual(list(markdown_sections("# C#\n\n<!--\n# Hidden\n-->\n\n## Setup ##\n")),
                          [(1, 1, "C#"), (7, 2, "Setup")])
 
+    def test_generated_index_links_quote_source_path_segments(self):
+        with TemporaryDirectory() as directory:
+            self.archived_graph(directory, "# Readme\n", {"getting started.md": "# Guide\n"})
+            index = (Path(directory) / "graph/README.md").read_text()
+            self.assertIn("[getting started.md](../../versions/v0.0.1/getting%20started.md)", index)
+
     def test_binary_and_latin1_sources_keep_pinned_bytes(self):
         with TemporaryDirectory() as directory:
             root = Path(directory) / "source-repo"
