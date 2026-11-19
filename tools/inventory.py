@@ -7,7 +7,7 @@ import platform
 import re
 import subprocess
 import xml.etree.ElementTree as ET
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 
 from native_outcomes import NATIVE_RUNNERS, UNITTEST_RESULT_FILE, node_command, passed_tests, selected_outcome, skipped_tests, unittest_command
@@ -25,13 +25,29 @@ def test_path(folder, name):
     return path.as_posix()
 
 
-def check_files(folder, cases):
+def check_windows_paths(folder, names):
+    seen = {}
+    for name in sorted(names):
+        parts = PurePosixPath(name).parts
+        for index, part in enumerate(parts, 1):
+            if (PureWindowsPath(part).is_reserved() or part.endswith((" ", "."))
+                    or any(char in '<>:"/\\|?*' or ord(char) < 32 for char in part)):
+                raise ValueError(f"{folder.name}: Windows cannot check out fixture path {name!r}")
+            prefix = "/".join(parts[:index])
+            existing = seen.setdefault(prefix.casefold(), prefix)
+            if existing != prefix:
+                raise ValueError(f"{folder.name}: Windows fixture paths collide: {existing!r}, {prefix!r}")
+
+
+def check_files(folder, cases, runner):
     declared = set()
     for case in cases:
         case["test"] = test_path(folder, case["test"])
         case["support"] = [test_path(folder, name) for name in case["support"]]
         declared.update([case["test"], *case["support"]])
 
+    if runner == "windows-latest":
+        check_windows_paths(folder, declared)
     tests = folder / "tests"
     boundary = folder.resolve() / "tests"
     if tests.is_symlink() or tests.resolve() != boundary:
@@ -206,7 +222,7 @@ def read_manifest(folder, seen):
                 if ("native_runner" in case) != requires_native or type(stage) is not int or not 0 <= stage < len(commands):
                     raise ValueError(f"{case_id}: invalid {field} for this runner or command list")
         seen.add(case_id)
-    check_files(folder, cases)
+    check_files(folder, cases, manifest["runner"])
     for case in cases:
         if not test_invocation(folder, case):
             raise ValueError(f"{case['id']}: command stages do not bind to declared test {case['test']}")

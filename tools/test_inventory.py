@@ -11,7 +11,7 @@ from unittest.mock import patch
 from tempfile import TemporaryDirectory
 from urllib.error import HTTPError
 
-from inventory import checkout_identity, execute_case, print_inventory, read_inventory, report_destination, run_cases, runtime_version
+from inventory import check_windows_paths, checkout_identity, execute_case, print_inventory, read_inventory, report_destination, run_cases, runtime_version
 from native_outcomes import passed_tests
 from release_record import (
     SUPPORTING_JOBS, github_resource, main as record_release, receipt_context,
@@ -125,6 +125,13 @@ class InventoryTests(unittest.TestCase):
             self.skipTest(f"host cannot create directory links: {error}")
         with self.assertRaisesRegex(ValueError, "real directory inside the language folder"):
             read_inventory(self.root)
+
+    def test_windows_paths_reject_invalid_names_and_case_collisions(self):
+        for paths in (["tests/a:b.py"], ["tests/CON.txt"], ["tests/a.py", "tests/A.py"],
+                      ["tests/Sub/a.py", "tests/sub/b.py"]):
+            with self.subTest(paths=paths), self.assertRaisesRegex(ValueError, "Windows .*fixture"):
+                check_windows_paths(self.root, paths)
+        check_windows_paths(self.root, ["tests/ok.py", "tests/sub/also-ok.py"])
 
     def test_case_paths_are_normalized_before_counting(self):
         test = self.add_language("one", "CHECK-001")
