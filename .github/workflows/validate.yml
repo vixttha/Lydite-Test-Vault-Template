@@ -63,7 +63,9 @@ jobs:
           go-version: '1.25.5'
           cache: false
       - name: Install locked Markdown parser
-        run: python -m pip install --only-binary=:all: --no-deps --require-hashes -r tools/markdown-requirements.txt
+        run: >-
+          python -m pip install --only-binary=:all: --no-deps --require-hashes
+          -r tools/markdown-requirements.txt
       - name: Verify inventory and adoption
         shell: bash
         run: |
@@ -183,11 +185,12 @@ jobs:
           python-version: '3.12'
       - name: Install locked Graphify and MCP packages
         run: >-
-          python -m pip install --no-cache-dir --only-binary=:all: --no-deps
+          python -m pip install --no-cache-dir --only-binary=:all: --no-deps --require-hashes
           -r tools/graphify/requirements.txt
       - name: Resolve upstream pins and verify archived maps
         shell: bash
         run: |
+          sha256sum tools/graphify/requirements.txt | tee -a "$GITHUB_STEP_SUMMARY"
           python tools/graphify/version_maps.py "$RUNNER_TEMP/lydite-maps" --fetch-upstream --check |
             tee -a "$GITHUB_STEP_SUMMARY"
       - name: Verify changed archive modes and archive or graph bytes fail
