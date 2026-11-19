@@ -54,6 +54,20 @@ class InventoryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "duplicate case CHECK-001"):
             read_inventory(self.root)
 
+    def test_metadata_rejects_bad_types_and_duplicate_keys_with_context(self):
+        self.add_language("one", "CHECK-001")
+        path = self.root / "one" / "metadata.json"
+        valid = path.read_text(encoding="utf-8")
+        for mutation, diagnosis in (
+            (valid.replace('"schema_version": 1', '"schema_version": true'), "schema_version"),
+            (valid.replace('"Example contract"', 'null'), "CHECK-001: purpose"),
+            (valid.replace('"runner":', '"runner": "ubuntu-24.04", "runner":'), "duplicate JSON field"),
+        ):
+            with self.subTest(diagnosis=diagnosis):
+                path.write_text(mutation, encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, f"metadata.json: .*{diagnosis}"):
+                    read_inventory(self.root)
+
 
 class NativeOutcomeTests(unittest.TestCase):
     def test_native_results_require_a_positive_pass_count(self):

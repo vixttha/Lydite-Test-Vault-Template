@@ -35,42 +35,88 @@ def check_files(folder, cases):
         raise ValueError(f"{folder.name}: missing {sorted(declared - actual)}, unlisted {sorted(actual - declared)}")
 
 
+def unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON field {key!r}")
+        result[key] = value
+    return result
+
+
+def required_fields(value, required, optional, label):
+    if not isinstance(value, dict):
+        raise ValueError(f"{label}: expected an object")
+    missing = required - value.keys()
+    unknown = value.keys() - required - optional
+    if missing or unknown:
+        raise ValueError(f"{label}: missing fields {sorted(missing)}; unknown fields {sorted(unknown)}")
+
+
+def nonblank(value):
+    return isinstance(value, str) and bool(value.strip()) and "\x00" not in value
+
+
+def argument_list(value):
+    return (
+        isinstance(value, list) and bool(value) and nonblank(value[0])
+        and all(isinstance(arg, str) and "\x00" not in arg for arg in value[1:])
+    )
+
+
+def read_manifest(folder, seen):
+    manifest = json.loads((folder / "metadata.json").read_text(encoding="utf-8"), object_pairs_hook=unique_object)
+    required_fields(manifest, {"schema_version", "language", "runtime", "runner", "cases"}, {"runtime_probe"}, "manifest")
+    if type(manifest["schema_version"]) is not int or manifest["schema_version"] != 1:
+        raise ValueError("schema_version: expected integer 1")
+    if not nonblank(manifest["runner"]) or manifest["runner"] not in RUNNERS:
+        raise ValueError(f"runner: expected one of {sorted(RUNNERS)}")
+    for key in ("language", "runtime"):
+        if not nonblank(manifest[key]):
+            raise ValueError(f"{key}: expected a nonblank string")
+    if "runtime_probe" in manifest and not argument_list(manifest["runtime_probe"]):
+        raise ValueError("runtime_probe: expected a nonempty argument list")
+    if not (folder / "GUIDE.md").is_file():
+        raise ValueError("GUIDE.md is missing")
+
+    cases = manifest["cases"]
+    if not isinstance(cases, list) or not cases:
+        raise ValueError("cases: expected at least one declared case")
+    for index, case in enumerate(cases, 1):
+        label = f"case {index}"
+        required_fields(case, {"id", "purpose", "test", "support", "commands"}, {"native_runner"}, label)
+        case_id = case["id"]
+        if not nonblank(case_id) or not CASE_ID.fullmatch(case_id) or case_id in seen:
+            raise ValueError(f"{label}: invalid or duplicate case {case_id}")
+        if not nonblank(case["purpose"]):
+            raise ValueError(f"{case_id}: purpose must be a nonblank string")
+        if not nonblank(case["test"]):
+            raise ValueError(f"{case_id}: test must be a nonblank path")
+        support = case["support"]
+        if not isinstance(support, list) or not all(nonblank(path) for path in support):
+            raise ValueError(f"{case_id}: support must be a list of nonblank paths")
+        commands = case["commands"]
+        if not isinstance(commands, list) or not commands or not all(argument_list(argv) for argv in commands):
+            raise ValueError(f"{case_id}: commands must contain one or more nonempty argument lists")
+        if "native_runner" in case:
+            native = case["native_runner"]
+            if not nonblank(native) or native not in NATIVE_RUNNERS:
+                raise ValueError(f"{case_id}: unknown native_runner {native!r}")
+        seen.add(case_id)
+    check_files(folder, cases)
+    return manifest
+
+
 def read_inventory(directory):
     inventory = {}
     seen = set()
     for folder in sorted(directory.iterdir()):
         if not folder.is_dir():
             continue
-        manifest = json.loads((folder / "metadata.json").read_text(encoding="utf-8"))
-        if manifest["schema_version"] != 1 or manifest["runner"] not in RUNNERS:
-            raise ValueError(f"{folder.name}: unknown schema or runner")
-        if not (folder / "GUIDE.md").is_file():
-            raise ValueError(f"{folder.name}: GUIDE.md is missing")
-        if any(not isinstance(manifest[k], str) or not manifest[k].strip() for k in ("language", "runtime")):
-            raise ValueError(f"{folder.name}: missing language or runtime")
-
-        cases = manifest["cases"]
-        if not isinstance(cases, list) or not cases:
-            raise ValueError(f"{folder.name}: expected at least one declared case")
-        for case in cases:
-            case_id = case["id"]
-            if not CASE_ID.fullmatch(case_id) or case_id in seen:
-                raise ValueError(f"{folder.name}: invalid or duplicate case {case_id}")
-            if not case["purpose"].strip() or not isinstance(case["support"], list):
-                raise ValueError(f"{case_id}: expected a purpose and a support-file list")
-            commands = case["commands"]
-            if not isinstance(commands, list) or not commands or any(
-                not isinstance(argv, list) or not argv or not all(isinstance(arg, str) and arg for arg in argv)
-                for argv in commands
-            ):
-                raise ValueError(f"{case_id}: expected one or more nonempty argument lists")
-            native = case.get("native_runner")
-            if native is not None and (not isinstance(native, str) or native not in NATIVE_RUNNERS):
-                raise ValueError(f"{case_id}: unknown native runner {native!r}")
-            seen.add(case_id)
-        check_files(folder, cases)
-        inventory[folder.name] = manifest
-
+        try:
+            inventory[folder.name] = read_manifest(folder, seen)
+        except (OSError, ValueError, RecursionError) as error:
+            raise ValueError(f"{folder / 'metadata.json'}: {error}") from error
     if not inventory:
         raise ValueError("No languages found")
     return inventory
