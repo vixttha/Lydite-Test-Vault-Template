@@ -1,0 +1,3 @@
+# Historical archives and generated maps are pinned byte for byte.
+versions/** -text
+"Graphify HQ/**" -text
