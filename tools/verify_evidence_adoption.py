@@ -121,6 +121,37 @@ def verify_missing_helpers(project, work, command, directory, observation, env):
         print(f"Rejected untracked receipt helper {helper}.")
 
 
+
+def verify_readme_block(project, work, env):
+    readme = (project / EXAMPLE / "README.md").read_text(encoding="utf-8")
+    block = readme.split("```bash\n", 1)[1].split("```", 1)[0]
+    fixtures = (
+        ("pass", None, None, "Overall: PASS"),
+        ("node-fail", "app.test.mjs", "\ntest('controlled failure', () => assert.fail('regression'));\n",
+         "| node-test | FAIL |"),
+        ("python-fail", "check.py", None, "| python-check | FAIL |"),
+        ("missing", "run-node.mjs", "\nprocess.exit(1);\n", "| node-test | MISSING |"),
+    )
+    for name, filename, change, expected in fixtures:
+        fixture = work / ("example-" + name)
+        run(["git", "clone", "--no-hardlinks", str(project), str(fixture)], work)
+        if filename:
+            path = fixture / EXAMPLE / filename
+            text = path.read_text(encoding="utf-8")
+            if name == "python-fail":
+                text = text.replace("unit_cents, quantity = 125, 3", "unit_cents, quantity = 126, 3")
+            elif name == "missing":
+                text = change + text
+            else:
+                text += change
+            path.write_text(text, encoding="utf-8")
+            run(["git", "add", "."], fixture)
+            run(["git", "-c", "user.name=Test Vault Fixture", "-c", "user.email=fixture@example.invalid",
+                 "-c", "commit.gpgsign=false", "commit", "-qm", name], fixture)
+        run(["bash", "-e", "-c", block], fixture, result=0 if name == "pass" else 1, includes=expected,
+            env={**env, "GITHUB_STEP_SUMMARY": "", "TMPDIR": str(work)})
+        print(f"Verified the copied README command for {name}.")
+
 def verify_upgrade(work):
     project = work / "project"
     previous = ROOT / "versions/v0.0.2/starter"
@@ -159,13 +190,14 @@ def verify_upgrade(work):
         "--receipts", str(directory), "--evidence", str(observation),
     ]
     suites = [
-        ["node", "--test", str(EXAMPLE / "app.test.mjs")],
+        ["node", str(EXAMPLE / "run-node.mjs")],
         [sys.executable, str(EXAMPLE / "check.py")],
     ]
     statuses = [subprocess.run(suite, cwd=project, env=env, check=False, timeout=75).returncode for suite in suites]
     print(run(command, project, includes="Overall: PASS", env=env))
     if any(statuses):
         raise AssertionError("Every example suite must also exit successfully")
+    verify_readme_block(project, work, env)
     verify_missing_helpers(project, work, command, directory, observation, env)
     test_receipts(project, env, command, directory, observation)
     print("Verified v0.0.2 opt-in alongside the existing catalog, workflow, and project test.")
