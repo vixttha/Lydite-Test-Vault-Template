@@ -38,7 +38,12 @@ def read_cases(path):
     comment = False
     raw_tag = None
     for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-        marker = FENCE.match(raw) if not comment and not raw_tag else None
+        if comment:
+            _, end, raw = raw.partition("-->")
+            if not end:
+                continue
+            comment = False
+        marker = FENCE.match(raw) if not raw_tag else None
         if fence:
             if marker and marker[1][0] == fence[0] and len(marker[1]) >= len(fence) and not marker[2].strip():
                 fence = None
@@ -53,11 +58,6 @@ def read_cases(path):
             continue
         indented_code = raw.expandtabs(4).startswith("    ")
         if not indented_code and not marker:
-            if comment:
-                _, end, raw = raw.partition("-->")
-                if not end:
-                    continue
-                comment = False
             while "<!--" in raw:
                 before, _, tail = raw.partition("<!--")
                 _, end, after = tail.partition("-->")

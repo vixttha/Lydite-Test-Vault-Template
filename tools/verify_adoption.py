@@ -156,6 +156,11 @@ def copy_and_check(sample, target):
     for mixed in (commented + catalog, catalog + commented):
         case_path.write_text(mixed, encoding="utf-8")
         run([*command, "--topics", str(topics_path)], target, includes="1 unique cases across 1 topics")
+    raw_tag_example = "<!-- illustrated HTML tag\n<pre>\n    -->\n"
+    second_catalog = HEADER + DIVIDER + row.replace("-001", "-002")
+    case_path.write_text(catalog + "\n" + raw_tag_example + "\n" + second_catalog, encoding="utf-8")
+    run(command, target, includes="2 unique cases across 1 topics")
+    case_path.write_text(catalog + "\n" + commented, encoding="utf-8")
     hidden_manifest = target / "hidden-case.json"
     hidden_manifest.write_text(
         '{"schema_version":1,"case_id":"HIDDEN-001","required_checks":["fixture"],"shared_evidence":false}',
