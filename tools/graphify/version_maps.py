@@ -59,13 +59,30 @@ def read_archive(tag, record):
         mode, kind, blob = meta.split()
         if kind != "blob" or mode not in {"100644", "100755"}:
             raise ValueError(f"{tag}: unsupported archived file {name}")
-        expected[name] = blob
+        expected[name] = (mode, blob)
     directory = ARCHIVE / tag
     archived = {p.relative_to(directory).as_posix(): p for p in directory.rglob("*") if p.is_file()}
     if not expected or archived.keys() != expected.keys():
         raise ValueError(f"{tag}: archived file inventory differs from {commit}:{source}")
+    tracked_modes = {}
+    relative_directory = directory.relative_to(ROOT).as_posix()
+    for entry in git("ls-files", "--stage", "-z", "--", relative_directory + "/").split(b"\0"):
+        if not entry:
+            continue
+        meta, path = entry.decode().split("\t", 1)
+        mode, _, stage = meta.split()
+        if stage != "0":
+            raise ValueError(f"{tag}: unmerged archive file {path}")
+        tracked_modes[path.removeprefix(relative_directory + "/")] = mode
+    if tracked_modes.keys() != expected.keys():
+        raise ValueError(f"{tag}: tracked archive inventory differs from {commit}:{source}")
     sources = {}
-    for name, digest in sorted(expected.items()):
+    for name, (mode, digest) in sorted(expected.items()):
+        if tracked_modes[name] != mode:
+            raise ValueError(
+                f"{tag}: archived Git mode differs for {name} "
+                f"(expected {mode}, found {tracked_modes[name]})"
+            )
         path = archived[name]
         data = path.read_bytes()
         if path.is_symlink() or hashlib.sha1(f"blob {len(data)}\0".encode() + data).hexdigest() != digest:
