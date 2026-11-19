@@ -5,11 +5,13 @@ import ast
 import asyncio
 import base64
 import hashlib
+import io
 import json
 import posixpath
 import re
 import subprocess
 import sys
+import tokenize
 from importlib.metadata import version
 from pathlib import Path, PurePosixPath
 from urllib.parse import unquote, urlsplit
@@ -96,8 +98,9 @@ def read_archive(tag, record):
         content = None
         if path.suffix in {".md", ".py"}:
             try:
-                content = data.decode("utf-8")
-            except UnicodeError as error:
+                encoding = tokenize.detect_encoding(io.BytesIO(data).readline)[0] if path.suffix == ".py" else "utf-8"
+                content = data.decode(encoding)
+            except (SyntaxError, UnicodeError) as error:
                 raise ValueError(f"{tag}: cannot decode archived text {name}: {error}") from error
         sources[name] = (path.relative_to(ROOT).as_posix(), digest, content)
     return sources
