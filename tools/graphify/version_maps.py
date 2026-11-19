@@ -20,6 +20,10 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from archive_manifest import load_manifest
+
+
 ROOT = Path(__file__).resolve().parents[2]
 ARCHIVE = ROOT / "versions"
 MAPS = ROOT / "Graphify HQ"
@@ -229,7 +233,7 @@ def main():
     output = args.output.resolve()
     if output == MAPS or output.is_relative_to(MAPS) or (output.exists() and (not output.is_dir() or any(output.iterdir()))):
         parser.error("output must be an empty directory outside Graphify HQ")
-    manifest = json.loads((ARCHIVE / "manifest.json").read_text(encoding="utf-8"))
+    manifest = load_manifest((ARCHIVE / "manifest.json").read_text(encoding="utf-8"))
     versions = manifest["versions"]
     frames = {path.name for path in ARCHIVE.iterdir() if path.is_dir()}
     if (manifest["schema_version"] != 1 or manifest["current"] not in versions or frames != versions.keys()

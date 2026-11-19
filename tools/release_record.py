@@ -10,6 +10,8 @@ from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
+from archive_manifest import load_manifest
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -168,7 +170,7 @@ def main():
             raise SystemExit(f"Release candidate rejected: {error}") from error
         print(f"Release target {version} is available for checkout {checkout}.")
         return
-    manifest = json.loads(git("show", f"{checkout}:versions/manifest.json"))
+    manifest = load_manifest(git("show", f"{checkout}:versions/manifest.json"))
     run_id = os.environ["GITHUB_RUN_ID"]
     run_url = f"{os.environ['GITHUB_SERVER_URL']}/{repository}/actions/runs/{run_id}"
     attempt = int(os.environ["GITHUB_RUN_ATTEMPT"])

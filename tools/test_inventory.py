@@ -11,6 +11,7 @@ from unittest.mock import patch
 from tempfile import TemporaryDirectory
 from urllib.error import HTTPError
 
+from archive_manifest import load_manifest
 from inventory import check_windows_paths, checkout_identity, execute_case, print_inventory, read_inventory, report_destination, run_cases, runtime_version
 from native_outcomes import passed_tests
 from release_record import (
@@ -571,6 +572,10 @@ class CheckoutIdentityTests(unittest.TestCase):
 
 
 class ReleaseEvidenceTests(unittest.TestCase):
+    def test_archive_manifest_rejects_nested_duplicate_keys(self):
+        with self.assertRaisesRegex(ValueError, "duplicate archive manifest field"):
+            load_manifest('{"versions":{"v0.0.1":{"source_commit":"a","source_commit":"b"}}}')
+
     def test_github_state_treats_only_expected_not_found_as_missing(self):
         for status in (403, 404, 429, 503):
             with self.subTest(status=status), patch.dict(os.environ, {"GITHUB_API_URL": "https://example.invalid"}):
