@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from verify_adoption import ACTION, ROOT, STARTER, VALIDATOR, run
+from verify_adoption import ACTION, DIVIDER, HEADER, ROOT, STARTER, VALIDATOR, run
 
 
 CASE_ROW = "| CLI-001 | CLI quote | P0 | Node.js and Python | Three units at 125 cents total 375 cents. |\n"
@@ -180,19 +180,19 @@ def verify_upgrade(work):
     shutil.copytree(previous, project)
     case_file = project / "test-vault/cases.md"
     old_cases = case_file.read_bytes()
-    old_parts = {path: (project / path).read_bytes() for path in (VALIDATOR, ACTION)}
+    old_workflow = (project / ACTION).read_bytes()
     run(["git", "init", "-qb", "trunk"], project)
     run([sys.executable, str(VALIDATOR)], project, includes="1 unique cases")
     (project / "existing_test.mjs").write_text(
         "import assert from 'node:assert/strict';\nassert.equal(6 * 7, 42);\n", encoding="utf-8",
     )
     run(["node", "--test", "existing_test.mjs"], project, includes="pass 1")
-    for file in ("verify_receipts.py", "source_commit.py", "evidence.md", "UPGRADE.md"):
+    for file in ("verify_receipts.py", "source_commit.py", "validate_catalog.py", "evidence.md", "UPGRADE.md"):
         shutil.copy2(STARTER / "test-vault" / file, project / "test-vault" / file)
     shutil.copytree(STARTER / EXAMPLE, project / EXAMPLE)
     case_file.write_bytes(old_cases.rstrip(b"\n") + b"\n" + CASE_ROW.encode())
-    if any((project / path).read_bytes() != data for path, data in old_parts.items()):
-        raise AssertionError("Opt-in altered the existing catalog validator or workflow")
+    if (project / ACTION).read_bytes() != old_workflow:
+        raise AssertionError("Opt-in altered the existing workflow")
     run([sys.executable, str(VALIDATOR)], project, includes="2 unique cases")
     run(["node", "--test", "existing_test.mjs"], project, includes="pass 1")
     run(["git", "add", "."], project)
@@ -219,6 +219,10 @@ def verify_upgrade(work):
     print(run(command, project, includes="Overall: PASS", env=env))
     if any(statuses):
         raise AssertionError("Every example suite must also exit successfully")
+    hidden = work / "commented-catalog.md"
+    hidden.write_bytes(old_cases + b"\n<!--\n" + (HEADER + DIVIDER + CASE_ROW).encode() + b"-->\n")
+    run([*command, "--catalog", str(hidden)], project, result=1,
+        includes="case ID must be registered", env={**env, "GITHUB_STEP_SUMMARY": ""})
     verify_readme_block(project, work, env)
     verify_missing_helpers(project, work, command, directory, observation, env)
     verify_sha256_checkout(project, work, command, directory, observation, env)
