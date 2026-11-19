@@ -50,3 +50,7 @@ Read `receipt.json` in the relevant artifact and match its checkout and tree to 
 Install the pinned parser with `python3 -m pip install --require-hashes -r tools/markdown-requirements.txt`. Run `python3 tools/check_doc_links.py` from the project checkout.
 
 Use `python3 tools/check_doc_links.py --tree HEAD` to verify the committed snapshot. The default command checks the working tree, including draft files.
+
+## Branchwell adoption evidence
+
+The [Branchwell plan](https://github.com/vixttha/Lydite-Test-Vault-Template/blob/46b63f7e0db3b56ed80cf3bbd76ce7511f25fa53/docs/branchwell-adoption.md) lists proposed adopter cases. The Branchwell workflow validates the plan and Lydite's declaration inventory. Record execution under the actual Branchwell checkout with case results and the manual status for UI-002.
