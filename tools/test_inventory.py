@@ -6,9 +6,10 @@ import subprocess
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 from tempfile import TemporaryDirectory
 
-from inventory import checkout_identity, execute_case, print_inventory, read_inventory
+from inventory import checkout_identity, execute_case, print_inventory, read_inventory, run_cases
 from native_outcomes import passed_tests
 
 
@@ -157,3 +158,37 @@ class CheckoutIdentityTests(unittest.TestCase):
             nested = root / "extracted-vault"
             nested.mkdir()
             self.assertEqual(checkout_identity(nested)["state"], "UNVERSIONED")
+
+
+    def test_mid_run_drift_blocks_the_next_case_and_invalidates_the_sha(self):
+        with TemporaryDirectory() as directory:
+            base = Path(directory)
+            root = base / "project"
+            language = root / "languages" / "fixture"
+            language.mkdir(parents=True)
+            (language / "tracked.txt").write_text("original", encoding="utf-8")
+            git = ["git", "-C", str(root)]
+            subprocess.run([*git, "init", "-q"], check=True)
+            subprocess.run([*git, "add", "."], check=True)
+            subprocess.run(
+                [*git, "-c", "user.name=Lydite Fixture", "-c", "user.email=fixture@example.invalid",
+                 "-c", "commit.gpgsign=false", "commit", "-qm", "Fixture source"],
+                check=True,
+            )
+            cases = [{
+                "id": ident, "purpose": "Check checkout continuity", "test": "tests/example.py",
+                "commands": [[sys.executable, "-c", command]],
+            } for ident, command in (
+                ("DRIFT-001", "from pathlib import Path; Path('tracked.txt').write_text('changed')"),
+                ("DRIFT-002", "from pathlib import Path; Path('next-case-marker').touch()"),
+            )]
+            manifest = {"cases": cases, "runner": "ubuntu-24.04", "runtime": "Python"}
+            evidence = base / "evidence.json"
+            with patch("inventory.ROOT", root), redirect_stdout(io.StringIO()):
+                result = run_cases({"fixture": manifest}, ["fixture"], evidence)
+            report = json.loads(evidence.read_text(encoding="utf-8"))
+            self.assertEqual(result, 1)
+            self.assertIsNone(report["checkout_sha"])
+            self.assertEqual(report["source"]["state"], "DRIFTED")
+            self.assertEqual([row["outcome"] for row in report["cases"]], ["FAIL", "BLOCKED"])
+            self.assertFalse((language / "next-case-marker").exists())

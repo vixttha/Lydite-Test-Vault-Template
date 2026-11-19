@@ -137,10 +137,16 @@ def print_inventory(inventory):
     print(f'\n{sum(len(m["cases"]) for m in inventory.values())} declared cases in {len(inventory)} language folders.')
 
 
-def execute_case(case, folder, env, *, timeout=180):
+class CheckoutDrift(RuntimeError):
+    """A verified checkout changed during execution."""
+
+
+def execute_case(case, folder, env, *, timeout=180, guard=None):
     output = ""
     with TemporaryDirectory(prefix="lydite-") as temp:
         for argv in case["commands"]:
+            if guard:
+                guard()
             command = [arg.replace("{tmp}", temp) for arg in argv]
             try:
                 result = subprocess.run(
@@ -155,6 +161,9 @@ def execute_case(case, folder, env, *, timeout=180):
                 return "BLOCKED", f"required executable unavailable: {argv[0]}"
             except OSError as error:
                 return "BLOCKED", f"cannot start {argv[0]}: {error}"
+            finally:
+                if guard:
+                    guard()
             output = result.stdout
             print(output, end="", flush=True)
             if result.returncode:
@@ -216,20 +225,39 @@ def run_cases(inventory, languages, evidence=None):
         },
         "cases": [],
     }
+    def guard():
+        if source["state"] == "CLEAN" and checkout_identity(ROOT) != source:
+            raise CheckoutDrift("the verified checkout changed during execution")
+
+    hosted_blocked = env.get("GITHUB_ACTIONS") == "true" and source["state"] != "CLEAN"
+    drifted = False
     print(f"Checkout {source['commit'] or source['state']} | run {report['run_id'] or 'local'}"
           f" | attempt {report['attempt'] or 'n/a'}", flush=True)
     for slug in languages:
         manifest = inventory[slug]
         folder = ROOT / "languages" / slug
-        runtime = runtime_version(manifest.get("runtime_probe"), folder, env)
+        runtime = None
+        if manifest.get("runtime_probe") and not (hosted_blocked or drifted):
+            try:
+                guard()
+                runtime = runtime_version(manifest["runtime_probe"], folder, env)
+                guard()
+            except CheckoutDrift:
+                drifted = True
         for case in manifest["cases"]:
             print(f'{case["id"]} | {case["purpose"]}', flush=True)
-            if env.get("GITHUB_ACTIONS") == "true" and source["state"] != "CLEAN":
+            if drifted:
+                status, reason = "BLOCKED", "tracked checkout changed during this run"
+            elif hosted_blocked:
                 status, reason = "BLOCKED", "hosted evidence requires a clean Git checkout at the Vault root"
             elif manifest.get("runtime_probe") and runtime is None:
                 status, reason = "BLOCKED", "declared runtime version probe failed"
             else:
-                status, reason = execute_case(case, folder, env)
+                try:
+                    status, reason = execute_case(case, folder, env, guard=guard)
+                except CheckoutDrift as error:
+                    drifted = True
+                    status, reason = "FAIL", str(error)
             print(f'{case["id"]} | {status} | {reason}', flush=True)
             report["cases"].append({
                 "case_id": case["id"], "language": slug, "test": case["test"],
@@ -237,6 +265,9 @@ def run_cases(inventory, languages, evidence=None):
                 "observed_runtime": runtime, "commands": case["commands"],
                 "outcome": status, "detail": reason,
             })
+    if drifted:
+        report["source"] = {"state": "DRIFTED", "commit": None, "base_commit": source["base_commit"]}
+        report["checkout_sha"] = None
     if evidence is not None:
         evidence.parent.mkdir(parents=True, exist_ok=True)
         evidence.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")

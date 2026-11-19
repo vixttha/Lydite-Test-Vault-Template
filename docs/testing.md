@@ -23,7 +23,7 @@ Keep planned cases in a project test plan. Once an assertion exists, record its 
 
 ## Run the examples
 
-Add `--evidence path/to/report.json` to write one record per selected case. Each record lists its command arguments, declared and observed runtime, and PASS, FAIL, SKIP, or BLOCKED outcome. A clean Git checkout receives its commit SHA. Modified and extracted checkouts can run locally and report MODIFIED or UNVERSIONED without claiming an exact commit. Hosted CI requires a clean checkout and uploads those reports on passing and failing runs, with the checkout, run and attempt, job, and runner image information.
+Add `--evidence path/to/report.json` to write one record per selected case. Each record lists its command arguments, declared and observed runtime, and PASS, FAIL, SKIP, or BLOCKED outcome. A clean Git checkout receives its commit SHA. Modified and extracted checkouts can run locally and report MODIFIED or UNVERSIONED without claiming an exact commit. If the verified checkout changes at a probe or command boundary, the report is marked DRIFTED and loses its claimed checkout SHA. Later cases are blocked. Hosted CI requires a clean checkout and uploads those reports on passing and failing runs, with the checkout, run and attempt, job, and runner image information.
 
 Run `python tools/inventory.py --run <language-folder>` with the runtime listed in that folder's metadata. The arguments run from the language folder. A `{tmp}` argument is replaced with a fresh temporary directory. Lydite's CI executes the examples on standard public GitHub-hosted Ubuntu and Windows runners and records the exact checkout and result for each case.
 
