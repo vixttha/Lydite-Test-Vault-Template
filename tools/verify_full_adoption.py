@@ -26,6 +26,7 @@ def verify(output, work):
                     ignore=shutil.ignore_patterns("__pycache__"))
     translations = project / "languages" / "en"
     translations.mkdir()
+    (translations / "metadata.json").write_text('{"locale":"en","fallback":"en-US"}\n', encoding="utf-8")
     (translations / "messages.json").write_text('{"hello":"Hello"}\n', encoding="utf-8")
     (project / "tools").mkdir()
     for name in ("inventory.py", "native_outcomes.py"):

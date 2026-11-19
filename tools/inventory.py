@@ -234,6 +234,19 @@ def read_manifest(folder, seen):
     return manifest
 
 
+def has_vault_declaration(folder):
+    if (folder / "GUIDE.md").is_file() and (folder / "tests").is_dir():
+        return True
+    metadata = folder / "metadata.json"
+    if metadata.is_symlink() or not metadata.is_file():
+        return False
+    try:
+        declaration = json.loads(metadata.read_text(encoding="utf-8"))
+    except (OSError, ValueError, RecursionError):
+        return False
+    return isinstance(declaration, dict) and {"language", "runtime", "runner", "cases"} <= declaration.keys()
+
+
 def read_inventory(directory, *, selected=None):
     if directory.is_symlink():
         raise ValueError(f"{directory}: inventory root must be a real directory")
@@ -242,9 +255,7 @@ def read_inventory(directory, *, selected=None):
     for folder in sorted(directory.iterdir()):
         if not folder.is_dir():
             continue
-        manifest = folder / "metadata.json"
-        if (folder.name != selected and not manifest.exists() and not manifest.is_symlink()
-                and not ((folder / "GUIDE.md").is_file() and (folder / "tests").is_dir())):
+        if folder.name != selected and not has_vault_declaration(folder):
             continue
         if folder.is_symlink() or folder.resolve() != directory.resolve() / folder.name:
             raise ValueError(f"{folder}: language root must stay inside the inventory")
