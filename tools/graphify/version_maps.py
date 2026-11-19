@@ -202,7 +202,8 @@ async def verify(output, receipt):
         async with ClientSession(reader, writer) as session:
             await session.initialize()
             result = await session.call_tool("graph_stats", {})
-            stats = {line for item in result.content if item.type == "text" for line in item.text.splitlines()}
+            stats = {line.removesuffix(" (matches HEAD)") if line.startswith("Built at commit: ") else line
+                     for item in result.content if item.type == "text" for line in item.text.splitlines()}
             expected = {f"Nodes: {receipt['nodes']}", f"Edges: {receipt['edges']}",
                         f"Built at commit: {receipt['source_commit']}"}
             if result.is_error or not expected <= stats:

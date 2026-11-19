@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import json
+import shutil
 import subprocess
 import unittest
 from pathlib import Path
@@ -41,6 +42,9 @@ class ArchiveTests(unittest.TestCase):
             output = Path(directory) / "graph"
             receipt = build_map("v0.0.1", record, files, output)
             asyncio.run(verify(output, receipt))
+            inside_git = root / "graph"
+            shutil.copytree(output, inside_git)
+            asyncio.run(verify(inside_git, receipt))
 
     def test_failed_batch_keeps_destination_reusable(self):
         with TemporaryDirectory() as directory:
