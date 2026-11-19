@@ -16,6 +16,20 @@ class ArchiveTests(unittest.TestCase):
         self.assertEqual(list(markdown_sections("# First\u2028still first\n# Second\n"))[-1],
                          (2, 1, "Second"))
 
+    def archived_graph(self, directory, readme, extra):
+        output = Path(directory) / "graph"
+        source = {"README.md": readme, **extra}
+        files = {name: ("versions/v0.0.1/" + name, "b" * 40, content) for name, content in source.items()}
+        build_map("v0.0.1", {"source_commit": "a" * 40, "source_path": "source"}, files, output)
+        return json.loads((output / "graph.json").read_bytes())
+
+    def test_archived_fence_samples_are_not_navigation(self):
+        fence = chr(96) * 3
+        readme = f"# Readme\n\n{fence}md\n[Example](guide.md)\n{fence}\n"
+        with TemporaryDirectory() as directory:
+            graph = self.archived_graph(directory, readme, {"guide.md": "# Guide\n"})
+            self.assertFalse(any(edge["relation"] == "links_to" for edge in graph["links"]))
+
     def test_binary_and_latin1_sources_keep_pinned_bytes(self):
         with TemporaryDirectory() as directory:
             root = Path(directory) / "source-repo"

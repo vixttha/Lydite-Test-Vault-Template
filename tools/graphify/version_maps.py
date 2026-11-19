@@ -25,6 +25,7 @@ from mcp.client.stdio import stdio_client
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from archive_manifest import load_manifest
+from markdown_docs import MARKDOWN, link_targets
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -34,7 +35,6 @@ UPSTREAM = "https://github.com/vixttha/AlderVale-Pact-of-Ten.git"
 VERSION = re.compile(r"v[0-9]+\.[0-9]+\.[0-9]+")
 HEADING = re.compile(r"^ {0,3}(#{1,6})\s+(.+?)\s*#*\s*$")
 FENCE = re.compile(r"^ {0,3}(\x60{3,}|~{3,})")
-LINK = re.compile(r"\[[^\]\n]+\]\(([^()\s]+)(?:\s+[^()]*)?\)")
 
 
 def git(*args):
@@ -156,8 +156,11 @@ def build_map(tag, record, sources, output):
                 node(child, title, "concept", path, number)
                 edge(stack[-1][1] if stack else key, child, "contains_section", path, number)
                 stack.append((level, child))
-            for link in LINK.findall(content):
-                parsed = urlsplit(link)
+            for _, link in link_targets(MARKDOWN.parse(content)):
+                try:
+                    parsed = urlsplit(link)
+                except ValueError:
+                    continue
                 if parsed.scheme or parsed.netloc or not parsed.path or parsed.path.startswith("/"):
                     continue
                 target = posixpath.normpath(posixpath.join(posixpath.dirname(name), unquote(parsed.path)))

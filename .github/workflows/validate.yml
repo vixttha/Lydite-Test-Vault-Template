@@ -186,7 +186,7 @@ jobs:
       - name: Install locked Graphify and MCP packages
         run: >-
           python -m pip install --no-cache-dir --only-binary=:all: --no-deps --require-hashes
-          -r tools/graphify/requirements.txt
+          -r tools/graphify/requirements.txt -r tools/markdown-requirements.txt
       - name: Test archive and MCP verification
         run: python -m unittest discover -s tools/graphify -p 'test_*.py'
       - name: Resolve upstream pins and verify archived maps
