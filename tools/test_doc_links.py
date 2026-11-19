@@ -61,3 +61,17 @@ class MarkdownNavigationTests(unittest.TestCase):
                 + "\n\n<!--\n# Comment\n-->\n\n# **Quick** Start\n")
         self.assertEqual(list(heading_anchors(MARKDOWN.parse(text))),
                          ["setup", "setup-1", "setup-1-1", "quick-start"])
+
+    def test_source_lines_and_rendered_heading_fragments(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            readme = root / "README.md"
+            (root / "other.md").write_text("# Set up\n")
+            (root / "code.py").write_text("pass\nprint(1)\n")
+            readme.write_text(
+                "[Heading](other.md#set-up) [Source](other.md?plain=1#L1) [Code](code.py#L1-L2)\n"
+                "[Far](code.py#L3) [Reverse](code.py#L2-L1) [Far MD](other.md?plain=1#L2)\n"
+            )
+            issues = validate_paths(root, [readme])
+            self.assertEqual(len(issues), 3)
+            self.assertTrue(all("no matching source line range" in issue for issue in issues))

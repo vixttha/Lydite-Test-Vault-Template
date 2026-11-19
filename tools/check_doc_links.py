@@ -2,9 +2,10 @@
 
 import argparse
 import os
+import re
 import subprocess
 from pathlib import Path
-from urllib.parse import unquote, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 
 from markdown_docs import MARKDOWN, heading_anchors, link_targets
 
@@ -38,8 +39,20 @@ def validate_paths(root, paths, *, read=read_text, exists=Path.exists, resolve=P
                 target = resolve(parent / decoded.lstrip("/")) if decoded else path
                 if not target.is_relative_to(root) or not exists(target):
                     issues.append(f"{where}: {raw} has no destination")
-                elif link.fragment and target.suffix.lower() == ".md" and unquote(link.fragment) not in heading_anchors(MARKDOWN.parse(read(target))):
-                    issues.append(f"{where}: {raw} has no matching heading")
+                elif link.fragment:
+                    fragment = unquote(link.fragment)
+                    markdown = target.suffix.lower() == ".md"
+                    plain = "1" in parse_qs(link.query).get("plain", [])
+                    if match := re.fullmatch(r"L(\d+)(?:-L(\d+))?", fragment):
+                        if plain or not markdown:
+                            start, end = int(match[1]), int(match[2] or match[1])
+                            text = read(target)
+                            line_count = text.count("\n") + bool(text and not text.endswith("\n"))
+                            if not 1 <= start <= end <= line_count:
+                                issues.append(f"{where}: {raw} has no matching source line range")
+                            continue
+                    if markdown and not plain and fragment not in heading_anchors(MARKDOWN.parse(read(target))):
+                        issues.append(f"{where}: {raw} has no matching heading")
             except (OSError, ValueError) as error:
                 issues.append(f"{where}: {raw!r} is invalid: {error}")
     return issues
