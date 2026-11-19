@@ -46,6 +46,24 @@ class ArchiveTests(unittest.TestCase):
             shutil.copytree(output, inside_git)
             asyncio.run(verify(inside_git, receipt))
 
+    def test_mcp_rejects_changed_digest_and_nonmatching_source_line(self):
+        with TemporaryDirectory() as directory:
+            output = Path(directory) / "graph"
+            record = {"source_commit": "a" * 40, "source_path": "source"}
+            files = {"README.md": ("versions/v0.0.1/README.md", "b" * 40, "# Readme\n")}
+            receipt = build_map("v0.0.1", record, files, output)
+            asyncio.run(verify(output, receipt))
+            graph = output / "graph.json"
+            data = json.loads(graph.read_bytes())
+            file = next(node for node in data["nodes"] if node["id"] == "file:README.md")
+            file["source_location"] = "L10"
+            graph.write_text(json.dumps(data), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "digest differs"):
+                asyncio.run(verify(output, receipt))
+            receipt["graph_sha256"] = hashlib.sha256(graph.read_bytes()).hexdigest()
+            with self.assertRaisesRegex(ValueError, "could not resolve"):
+                asyncio.run(verify(output, receipt))
+
     def test_failed_batch_keeps_destination_reusable(self):
         with TemporaryDirectory() as directory:
             output = Path(directory) / "maps"

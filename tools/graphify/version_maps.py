@@ -197,6 +197,9 @@ def build_map(tag, record, sources, output):
 
 
 async def verify(output, receipt):
+    if hashlib.sha256((output / "graph.json").read_bytes()).hexdigest() != receipt["graph_sha256"]:
+        raise ValueError(f"{output.name}: Graphify file digest differs from the receipt")
+    issue = None
     server = StdioServerParameters(command=sys.executable, args=["-m", "graphify.serve", str(output / "graph.json")])
     async with asyncio.timeout(30), stdio_client(server) as (reader, writer):
         async with ClientSession(reader, writer) as session:
@@ -207,12 +210,16 @@ async def verify(output, receipt):
             expected = {f"Nodes: {receipt['nodes']}", f"Edges: {receipt['edges']}",
                         f"Built at commit: {receipt['source_commit']}"}
             if result.is_error or not expected <= stats:
-                raise ValueError(f"{output.name}: Graphify MCP statistics differ from the export")
-            for name, entry in receipt["sources"].items():
-                result = await session.call_tool("get_node", {"node_id": file_id(name)})
-                reply = "\n".join(item.text for item in result.content if item.type == "text")
-                if result.is_error or f"Source: {entry['archive_path']} L1" not in reply:
-                    raise ValueError(f"{output.name}: Graphify MCP could not resolve {name}: {reply[:400]}")
+                issue = "Graphify MCP statistics differ from the export"
+            else:
+                for name, entry in receipt["sources"].items():
+                    result = await session.call_tool("get_node", {"node_id": file_id(name)})
+                    reply = "\n".join(item.text for item in result.content if item.type == "text")
+                    if result.is_error or f"Source: {entry['archive_path']} L1" not in {line.lstrip() for line in reply.splitlines()}:
+                        issue = f"Graphify MCP could not resolve {name}: {reply[:400]}"
+                        break
+    if issue:
+        raise ValueError(f"{output.name}: {issue}")
 
 
 def compare(output, export_missing):
