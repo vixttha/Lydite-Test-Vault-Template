@@ -2,6 +2,7 @@ from contextlib import redirect_stdout
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import unittest
@@ -99,7 +100,7 @@ class NativeOutcomeTests(unittest.TestCase):
                 '{"Action":"pass","Package":"pkg"}',
                 '{"Action":"skip","Test":"TestBound"}',
             ),
-            "node-tap": ("# pass 1\n", "# pass 0\n", "# pass 0\n# skipped 1\n"),
+            "node-tap": ("ok 1 - passing test\n", "1..0\n", "ok 1 - skipped test # SKIP\n"),
             "rust-libtest": (
                 "test result: ok. 1 passed; 0 failed;",
                 "test result: ok. 0 passed; 0 failed;",
@@ -116,6 +117,25 @@ class NativeOutcomeTests(unittest.TestCase):
                 self.assertEqual(passed_tests(runner, passing), 1)
                 self.assertEqual(passed_tests(runner, empty), 0)
                 self.assertEqual(passed_tests(runner, skipped), 0)
+
+    @unittest.skipUnless(shutil.which("node"), "Node is needed for TAP regression checks")
+    def test_node_tap_checks_leaf_results_instead_of_parent_groups(self):
+        with TemporaryDirectory() as directory:
+            test = Path(directory) / "fixture.test.mjs"
+            for statement, wanted in (
+                ("await t.test('optional', {skip: true}, () => {});", "SKIP"),
+                ("await t.test('required', () => assert.equal(2 + 2, 4));", "PASS"),
+                ("await t.test('todo', {todo: true}, () => {});", "FAIL"),
+            ):
+                with self.subTest(statement=statement), redirect_stdout(io.StringIO()):
+                    test.write_text(
+                        "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\n"
+                        + "test('group', async (t) => {" + statement + "});\n",
+                        encoding="utf-8",
+                    )
+                    case = {"native_runner": "node-tap",
+                            "commands": [["node", "--test", "--test-reporter=tap", str(test)]]}
+                    self.assertEqual(execute_case(case, directory, os.environ)[0], wanted)
 
 
 class CommandOutcomeTests(unittest.TestCase):
