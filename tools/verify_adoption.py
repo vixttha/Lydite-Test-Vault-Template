@@ -113,6 +113,14 @@ def copy_and_check(sample, target):
         example = f"{fence}markdown\n{HEADER}{DIVIDER}{row}{fence}\n\n"
         case_path.write_text(example + catalog, encoding="utf-8")
         run(command, target, includes="1 unique cases across 1 topics")
+    def without_outer_pipes(line):
+        return line.strip().removeprefix("|").removesuffix("|") + "\n"
+
+    bare_table = "".join("   " + without_outer_pipes(line) for line in (HEADER, DIVIDER, row))
+    case_path.write_text(bare_table, encoding="utf-8")
+    run(command, target, includes="1 unique cases across 1 topics")
+    case_path.write_text("".join("    " + line for line in (HEADER, DIVIDER, row)), encoding="utf-8")
+    run(command, target, result=1, includes="no cases found")
     case_path.write_text(catalog, encoding="utf-8")
     run(workflow_step, target, env=env, includes="Catalog result: PASS")
     case_path.write_text(catalog + "  " + row.replace("| P0 |", "| P9 |"), encoding="utf-8")
