@@ -111,6 +111,9 @@ def copy_and_check(sample, target):
     topics_path.write_text(f'["{topic}"]\n', encoding="utf-8")
     case_path.write_text(HEADER + row, encoding="utf-8")
     run(command, target, result=1, includes="expected a Markdown table divider")
+    invalid_fence = chr(96) * 3 + "lang" + chr(96) + "invalid"
+    case_path.write_text(invalid_fence + "\n\n" + catalog, encoding="utf-8")
+    run(command, target, includes="1 unique cases across 1 topics")
     for fence in ("```", "~~~"):
         example = f"{fence}markdown\n{HEADER}{DIVIDER}{row}{fence}\n\n"
         case_path.write_text(example + catalog, encoding="utf-8")

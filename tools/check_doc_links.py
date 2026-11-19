@@ -15,9 +15,9 @@ def links(path):
     for line in text.splitlines():
         if match := re.match(r"^ {0,3}(`{3,}|~{3,})(.*)$", line):
             marker, rest = match.groups()
-            if fenced is None:
+            if fenced is None and (marker[0] != chr(96) or chr(96) not in rest):
                 fenced = marker
-            elif fenced[0] == marker[0] and len(marker) >= len(fenced) and not rest.strip():
+            elif fenced and fenced[0] == marker[0] and len(marker) >= len(fenced) and not rest.strip():
                 fenced = None
             continue
         if fenced is None:

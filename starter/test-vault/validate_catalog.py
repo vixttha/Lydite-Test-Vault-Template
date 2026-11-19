@@ -55,7 +55,7 @@ def read_cases(path):
             in_table = True
             continue
 
-        if marker:
+        if marker and (marker[1][0] != chr(96) or chr(96) not in marker[2]):
             fence = marker[1]
         if starts_comment:
             comment = "-->" not in line

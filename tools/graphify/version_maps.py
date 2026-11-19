@@ -101,9 +101,10 @@ def markdown_sections(content):
         delimiter = FENCE.match(line)
         if delimiter:
             token = delimiter[1]
-            if fence is None:
+            tail = line[delimiter.end():]
+            if fence is None and (token[0] != chr(96) or chr(96) not in tail):
                 fence = token
-            elif token[0] == fence[0] and len(token) >= len(fence) and not line[delimiter.end():].strip():
+            elif fence and token[0] == fence[0] and len(token) >= len(fence) and not line[delimiter.end():].strip():
                 fence = None
             continue
         if not fence and (heading := HEADING.match(line)):
