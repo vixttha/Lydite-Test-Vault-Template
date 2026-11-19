@@ -206,7 +206,10 @@ def runtime_version(probe, folder, env):
         )
     except (OSError, subprocess.SubprocessError):
         return None
-    return (result.stdout or result.stderr).splitlines()[0] if result.stdout or result.stderr else None
+    return next(
+        (line.strip() for output in (result.stdout, result.stderr) for line in output.splitlines() if line.strip()),
+        None,
+    )
 
 
 def checkout_identity(root):

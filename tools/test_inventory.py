@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 from tempfile import TemporaryDirectory
 
-from inventory import checkout_identity, execute_case, print_inventory, read_inventory, report_destination, run_cases
+from inventory import checkout_identity, execute_case, print_inventory, read_inventory, report_destination, run_cases, runtime_version
 from native_outcomes import passed_tests
 from release_record import SUPPORTING_JOBS, supporting_evidence
 
@@ -215,6 +215,16 @@ class CommandOutcomeTests(unittest.TestCase):
                     self.assertEqual([stage["exit_code"] for stage in record["command_results"]],
                                      [5, None] if code else [0, 0])
                     stages[0][-1] = "pass"
+
+    def test_runtime_probe_requires_nonblank_output(self):
+        with TemporaryDirectory() as directory:
+            for source, expected in (
+                ("print(' ')", None),
+                ("print('\\nRuntime 1.0')", "Runtime 1.0"),
+                ("import sys; print(' '); print('Runtime 2.0', file=sys.stderr)", "Runtime 2.0"),
+            ):
+                with self.subTest(expected=expected):
+                    self.assertEqual(runtime_version([sys.executable, "-c", source], directory, os.environ), expected)
 
 
 class CheckoutIdentityTests(unittest.TestCase):
