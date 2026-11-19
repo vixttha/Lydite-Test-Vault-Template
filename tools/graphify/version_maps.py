@@ -25,7 +25,7 @@ from mcp.client.stdio import stdio_client
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from archive_manifest import load_manifest
-from markdown_docs import MARKDOWN, link_targets
+from markdown_docs import MARKDOWN, headings, link_targets
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -33,8 +33,6 @@ ARCHIVE = ROOT / "versions"
 MAPS = ROOT / "Graphify HQ"
 UPSTREAM = "https://github.com/vixttha/AlderVale-Pact-of-Ten.git"
 VERSION = re.compile(r"v[0-9]+\.[0-9]+\.[0-9]+")
-HEADING = re.compile(r"^ {0,3}(#{1,6})\s+(.+?)\s*#*\s*$")
-FENCE = re.compile(r"^ {0,3}(\x60{3,}|~{3,})")
 
 
 def git(*args):
@@ -112,19 +110,7 @@ def file_id(name):
 
 
 def markdown_sections(content):
-    fence = None
-    for number, line in enumerate(content.split("\n"), 1):
-        delimiter = FENCE.match(line)
-        if delimiter:
-            token = delimiter[1]
-            tail = line[delimiter.end():]
-            if fence is None and (token[0] != chr(96) or chr(96) not in tail):
-                fence = token
-            elif fence and token[0] == fence[0] and len(token) >= len(fence) and not line[delimiter.end():].strip():
-                fence = None
-            continue
-        if not fence and (heading := HEADING.match(line)):
-            yield number, len(heading[1]), heading[2]
+    yield from headings(MARKDOWN.parse(content))
 
 
 def build_map(tag, record, sources, output):
@@ -149,14 +135,15 @@ def build_map(tag, record, sources, output):
         edge(tag, key, "contains_file", path, 1)
         if name.endswith(".md"):
             stack = []
-            for number, level, title in markdown_sections(content):
+            tokens = MARKDOWN.parse(content)
+            for number, level, title in headings(tokens):
                 while stack and stack[-1][0] >= level:
                     stack.pop()
                 child = f"{key}:L{number}"
                 node(child, title, "concept", path, number)
                 edge(stack[-1][1] if stack else key, child, "contains_section", path, number)
                 stack.append((level, child))
-            for _, link in link_targets(MARKDOWN.parse(content)):
+            for _, link in link_targets(tokens):
                 try:
                     parsed = urlsplit(link)
                 except ValueError:

@@ -30,6 +30,10 @@ class ArchiveTests(unittest.TestCase):
             graph = self.archived_graph(directory, readme, {"guide.md": "# Guide\n"})
             self.assertFalse(any(edge["relation"] == "links_to" for edge in graph["links"]))
 
+    def test_archived_setext_heading_has_its_title_line(self):
+        self.assertEqual(list(markdown_sections("Install\n=======\n\nNext\n----\n")),
+                         [(1, 1, "Install"), (4, 2, "Next")])
+
     def test_binary_and_latin1_sources_keep_pinned_bytes(self):
         with TemporaryDirectory() as directory:
             root = Path(directory) / "source-repo"
