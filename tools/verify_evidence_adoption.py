@@ -99,6 +99,28 @@ def test_receipts(project, env, command, directory, observation):
     print("Verified exact plan binding, rejection of changed required checks, and matching v1 compatibility.")
 
 
+def verify_missing_helpers(project, work, command, directory, observation, env):
+    quiet_env = {key: value for key, value in env.items() if key != "GITHUB_STEP_SUMMARY"}
+    original = {path.name: json.loads(path.read_bytes()) for path in directory.glob("*.json")}
+    for helper in ("source_commit.py", "validate_catalog.py"):
+        partial = work / helper.removesuffix(".py")
+        run(["git", "clone", "--no-hardlinks", str(project), str(partial)], work)
+        path = "test-vault/" + helper
+        run(["git", "rm", "--cached", "--", path], partial)
+        run(["git", "-c", "user.name=Test Vault Fixture", "-c", "user.email=fixture@example.invalid",
+             "-c", "commit.gpgsign=false", "commit", "-qm", "Leave one copied helper untracked"], partial)
+        checkout = run(["git", "rev-parse", "HEAD"], partial).strip()
+        receipts = partial / "receipts"
+        receipts.mkdir()
+        for name, record in original.items():
+            write_json(receipts / name, {**record, "checkout_sha": checkout})
+        run([*command[:2], "--case", str(EXAMPLE / "case.json"), "--receipts", str(receipts),
+             "--evidence", str(observation)], partial, result=1,
+            includes=f"receipt source must be tracked in the intended Git checkout: {Path(path)}",
+            env=quiet_env)
+        print(f"Rejected untracked receipt helper {helper}.")
+
+
 def verify_upgrade(work):
     project = work / "project"
     previous = ROOT / "versions/v0.0.2/starter"
@@ -144,6 +166,7 @@ def verify_upgrade(work):
     print(run(command, project, includes="Overall: PASS", env=env))
     if any(statuses):
         raise AssertionError("Every example suite must also exit successfully")
+    verify_missing_helpers(project, work, command, directory, observation, env)
     test_receipts(project, env, command, directory, observation)
     print("Verified v0.0.2 opt-in alongside the existing catalog, workflow, and project test.")
 
