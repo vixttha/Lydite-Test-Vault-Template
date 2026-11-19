@@ -12,6 +12,7 @@ from tempfile import TemporaryDirectory
 
 from inventory import checkout_identity, execute_case, print_inventory, read_inventory, report_destination, run_cases
 from native_outcomes import passed_tests
+from release_record import SUPPORTING_JOBS, supporting_evidence
 
 
 class InventoryTests(unittest.TestCase):
@@ -300,3 +301,29 @@ class CheckoutIdentityTests(unittest.TestCase):
                     report_destination(alias)
                 self.assertEqual(report_destination(root / "run.json"), (root / "run.json").resolve())
             self.assertEqual(tracked.read_text(encoding="utf-8"), "retained")
+
+
+class ReleaseEvidenceTests(unittest.TestCase):
+    def test_receipt_requires_a_complete_same_attempt_evidence_set(self):
+        attempt, run_id = 2, 123
+        jobs = [{"name": name, "id": index, "run_id": run_id, "run_attempt": attempt, "conclusion": "success"}
+                for index, (name, _) in enumerate(SUPPORTING_JOBS, 1)]
+        artifacts = [{"name": f"{prefix}-attempt-2", "id": index, "expired": False,
+                      "expires_at": "2026-12-19T00:00:00Z", "digest": "sha256:fixture"}
+                     for index, (_, prefix) in enumerate(SUPPORTING_JOBS, 1) if prefix]
+
+        def verify():
+            return supporting_evidence(jobs, artifacts, run_id, attempt, "https://example.invalid/runs/123")
+
+        self.assertEqual([item["artifact"]["id"] for item in verify() if "artifact" in item], [1, 2, 3])
+        jobs[0]["run_attempt"] = 1
+        with self.assertRaisesRegex(ValueError, "attempt 2.*Re-run all jobs"):
+            verify()
+        jobs[0]["run_attempt"] = attempt
+        artifacts[0]["name"] = "lydite-adoption-attempt-1"
+        with self.assertRaisesRegex(ValueError, "lydite-adoption-attempt-2.*Re-run all jobs"):
+            verify()
+        artifacts[0]["name"] = "lydite-adoption-attempt-2"
+        artifacts[0]["expired"] = True
+        with self.assertRaisesRegex(ValueError, "unavailable or incomplete"):
+            verify()
