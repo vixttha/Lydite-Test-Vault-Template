@@ -138,6 +138,19 @@ def copy_and_check(sample, target):
     )
     run([sys.executable, "test-vault/verify_receipts.py", "--case", str(hidden_manifest),
          "--receipts", "receipts"], target, result=1, includes="case ID must be registered")
+    orphan = "| FIXTURE-002 | Missing row | P0 | Fixture | Must be registered |\n"
+    malformed = "\n" + HEADER.replace("Expected outcome", "Expected result") + DIVIDER + orphan
+    for tail, message in (("\n" + orphan, "case FIXTURE-002 is outside"),
+                          (malformed, "malformed Test Vault header")):
+        case_path.write_text(catalog + tail, encoding="utf-8")
+        run(command, target, result=1, includes=message)
+        run([sys.executable, "test-vault/verify_receipts.py", "--case", str(hidden_manifest),
+             "--receipts", "receipts"], target, result=1, includes=message)
+    unrelated = "\n| Reference | Owner |\n|---|---|\n| FIXTURE-002 | Example |\n"
+    case_path.write_text(catalog + unrelated, encoding="utf-8")
+    run(command, target, includes="1 unique cases across 1 topics")
+    case_path.write_text(catalog + "\n" + HEADER + DIVIDER + orphan, encoding="utf-8")
+    run(command, target, includes="2 unique cases")
     case_path.write_text(catalog, encoding="utf-8")
     run(workflow_step, target, env=env, includes="Catalog result: PASS")
     case_path.write_text(catalog + "  " + row.replace("| P0 |", "| P9 |"), encoding="utf-8")

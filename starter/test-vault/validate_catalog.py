@@ -29,6 +29,8 @@ def read_cases(path):
     cases = set()
     topics = set()
     in_table = False
+    other_table = False
+    previous_width = None
     pending_divider = None
     fence = None
     comment = False
@@ -58,14 +60,27 @@ def read_cases(path):
         if starts_comment:
             comment = "-->" not in line
         if not cells:
-            in_table = False
+            in_table = other_table = False
+            previous_width = None
             continue
         if cells == HEADER:
             pending_divider = number
+            other_table = False
             continue
+        if not other_table and len(cells) == len(HEADER):
+            differences = [field for actual, field in zip(cells, HEADER) if actual != field]
+            if len(differences) == 1:
+                raise ValueError(f"{path}:{number}: malformed Test Vault header; expected {differences[0]!r}")
+        match = CASE_ID.fullmatch(cells[0])
         if not in_table:
+            if other_table:
+                continue
+            if previous_width == len(cells) and all(SEPARATOR.fullmatch(cell) for cell in cells):
+                other_table = True
+            elif match and len(cells) == len(HEADER):
+                raise ValueError(f"{path}:{number}: case {match.group()} is outside a Test Vault table")
+            previous_width = len(cells)
             continue
-        match = CASE_ID.fullmatch(cells[0]) if cells else None
         if len(cells) != len(HEADER) or not all(cells) or not match or cells[2] not in PRIORITIES:
             raise ValueError(f"{path}:{number}: invalid case row")
         case_id = match.group()
