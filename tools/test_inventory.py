@@ -510,6 +510,21 @@ class CheckoutIdentityTests(unittest.TestCase):
                         run_cases({}, [], path)
                 execute.assert_not_called()
 
+    def test_report_protects_linked_worktree_git_paths(self):
+        with TemporaryDirectory() as directory:
+            base = Path(directory)
+            root, linked = base / "source", base / "linked"
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            git = ["git", "-C", str(root)]
+            subprocess.run([*git, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                            "commit", "--allow-empty", "-qm", "fixture"], check=True)
+            subprocess.run([*git, "worktree", "add", "--detach", "-q", str(linked)], check=True)
+            with patch("inventory.ROOT", linked):
+                for path in (root / ".git", root / ".git/worktrees/linked"):
+                    with self.assertRaisesRegex(ValueError, "inside project inputs"):
+                        report_destination(path / "report.json")
+                self.assertEqual(report_destination(base / "report.json"), base / "report.json")
+
     def test_report_rejects_tracked_destinations_before_running_cases(self):
         with TemporaryDirectory() as directory:
             root = Path(directory)

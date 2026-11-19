@@ -371,10 +371,17 @@ def checkout_identity(root):
 
 def report_destination(path):
     destination = path.resolve()
-    inputs = ((ROOT / name).resolve() for name in ("languages", "tools"))
-    if destination.is_relative_to((ROOT / ".git").resolve()) or (
-        any(destination.is_relative_to(prefix) for prefix in inputs)
-    ):
+    inputs = {(ROOT / name).resolve() for name in ("languages", "tools", ".git")}
+    for kind in ("--git-dir", "--git-common-dir"):
+        try:
+            directory = subprocess.check_output(
+                ["git", "-C", str(ROOT), "rev-parse", "--path-format=absolute", kind],
+                text=True, stderr=subprocess.DEVNULL,
+            ).removesuffix("\n")
+        except (OSError, subprocess.CalledProcessError):
+            continue
+        inputs.add(Path(directory).resolve())
+    if any(destination.is_relative_to(prefix) for prefix in inputs):
         raise ValueError("evidence destination points inside project inputs")
     try:
         tracked = subprocess.check_output(
