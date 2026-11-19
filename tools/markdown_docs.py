@@ -1,5 +1,6 @@
 """Extract rendered Markdown navigation with physical source locations."""
 
+import re
 from html.parser import HTMLParser
 
 from markdown_it import MarkdownIt
@@ -72,11 +73,9 @@ def headings(tokens):
             yield token.map[0] + 1, int(token.tag[1:]), title
 
 
-def heading_anchors(tokens):
-    import re
-
+def heading_ids(tokens):
     used = set()
-    for _, _, title in headings(tokens):
+    for line, _, title in headings(tokens):
         slug = re.sub(r"[^\w -]", "", title.lower()).replace(" ", "-")
         if not slug:
             continue
@@ -85,7 +84,11 @@ def heading_anchors(tokens):
             candidate = f"{slug}-{number}"
             number += 1
         used.add(candidate)
-        yield candidate
+        yield candidate, line
+
+
+def heading_anchors(tokens):
+    yield from (slug for slug, _ in heading_ids(tokens))
     for token in tokens:
         if token.type == "html_block":
             yield from html_navigation(token.content).anchors

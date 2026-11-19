@@ -57,6 +57,17 @@ class ArchiveTests(unittest.TestCase):
             targets = [edge["target"] for edge in graph["links"] if edge["relation"] == "links_to"]
             self.assertEqual(targets, ["file:guide.md"])
 
+    def test_archive_links_keep_section_targets_and_each_source_line(self):
+        readme = "[First](guide.md#first)\n[Second](guide.md#second)\n[Again](guide.md#first)\n"
+        with TemporaryDirectory() as directory:
+            graph = self.archived_graph(directory, readme, {"guide.md": "# First\n\n# Second\n"})
+            links = {edge["target"]: edge for edge in graph["links"] if edge["relation"] == "links_to"}
+            self.assertEqual(set(links), {"file:guide.md:L1", "file:guide.md:L3"})
+            first = links["file:guide.md:L1"]
+            seen = {first["source_location"], *(item["source_location"] for item in first["also_seen"])}
+            self.assertEqual(seen, {"L1", "L3"})
+            self.assertEqual(links["file:guide.md:L3"]["source_location"], "L2")
+
     def test_binary_and_latin1_sources_keep_pinned_bytes(self):
         with TemporaryDirectory() as directory:
             root = Path(directory) / "source-repo"

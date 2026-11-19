@@ -25,7 +25,7 @@ from mcp.client.stdio import stdio_client
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from archive_manifest import load_manifest
-from markdown_docs import MARKDOWN, headings, link_targets
+from markdown_docs import MARKDOWN, heading_ids, headings, link_targets
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -121,12 +121,15 @@ def build_map(tag, record, sources, output):
                       "source_location": f"L{line}" if line else None}
 
     def edge(start, end, relation, path, line=None):
-        edges[start, end, relation] = {
+        edges[start, end, relation, line] = {
             "source": start, "target": end, "relation": relation, "source_file": path,
             "source_location": f"L{line}" if line else None, "confidence": "EXTRACTED",
             "confidence_score": 1.0, "weight": 1.0,
         }
 
+    parsed_docs = {name: MARKDOWN.parse(content) for name, (_, _, content) in sources.items()
+                   if name.endswith(".md")}
+    sections = {name: dict(heading_ids(tokens)) for name, tokens in parsed_docs.items()}
     node(tag, f"Test Vault template {tag}", "concept")
     for name, (path, _, content) in sources.items():
         key = file_id(name)
@@ -135,7 +138,7 @@ def build_map(tag, record, sources, output):
         edge(tag, key, "contains_file", path, 1)
         if name.endswith(".md"):
             stack = []
-            tokens = MARKDOWN.parse(content)
+            tokens = parsed_docs[name]
             for number, level, title in headings(tokens):
                 while stack and stack[-1][0] >= level:
                     stack.pop()
@@ -143,20 +146,25 @@ def build_map(tag, record, sources, output):
                 node(child, title, "concept", path, number)
                 edge(stack[-1][1] if stack else key, child, "contains_section", path, number)
                 stack.append((level, child))
-            for _, link in link_targets(tokens):
+            for line, link in link_targets(tokens):
                 try:
                     parsed = urlsplit(link)
                 except ValueError:
                     continue
-                if parsed.scheme or parsed.netloc or not parsed.path or parsed.path.startswith("/"):
+                if parsed.scheme or parsed.netloc or parsed.path.startswith("/") or not (parsed.path or parsed.fragment):
                     continue
-                target = posixpath.normpath(posixpath.join(posixpath.dirname(name), unquote(parsed.path)))
+                target = (posixpath.normpath(posixpath.join(posixpath.dirname(name), unquote(parsed.path)))
+                          if parsed.path else name)
                 if target not in sources:
                     directory = posixpath.join(target, "README.md")
                     if directory in sources:
                         target = directory
-                if target in sources and target != name:
-                    edge(key, file_id(target), "links_to", path)
+                fragment = unquote(parsed.fragment)
+                target_line = sections.get(target, {}).get(fragment)
+                if target_line:
+                    edge(key, f"{file_id(target)}:L{target_line}", "links_to", path, line)
+                elif target in sources and target != name:
+                    edge(key, file_id(target), "links_to", path, line)
         elif name.endswith(".py"):
             for item in ast.parse(content, filename=path).body:
                 if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
