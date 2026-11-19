@@ -633,7 +633,9 @@ class ReleaseEvidenceTests(unittest.TestCase):
         }
         support = [{"artifact": {"expires_at": "2026-12-19T00:00:00Z"}}]
         with TemporaryDirectory() as folder, patch.dict(os.environ, environment, clear=True), \
-                patch("release_record.git", return_value=checkout), \
+                patch("release_record.git", side_effect=lambda *args: (
+                    '{"schema_version":1,"current":"v0.0.3","versions":{"v0.0.3":{}}}' if args[0] == "show" else checkout
+                )) as source, \
                 patch("release_record.fetch_support", return_value=support) as fetch, \
                 patch("release_record.verify_candidate_target") as verify, redirect_stdout(io.StringIO()):
             with patch.object(sys, "argv", ["release_record.py", "--check-target"]):
@@ -648,7 +650,10 @@ class ReleaseEvidenceTests(unittest.TestCase):
                 self.assertFalse(output.exists())
                 verify.side_effect = None
                 record_release()
-            self.assertEqual(json.loads(output.read_bytes())["target"], "v1.2.3")
+            record = json.loads(output.read_bytes())
+            self.assertEqual(record["target"], "v1.2.3")
+            self.assertEqual(record["archive_current"], "v0.0.3")
+            source.assert_any_call("show", f"{checkout}:versions/manifest.json")
 
     def test_routine_validation_has_no_release_identity(self):
         self.assertEqual(receipt_context("pull_request", pr_head="head", pr_base="base"), {

@@ -168,7 +168,7 @@ def main():
             raise SystemExit(f"Release candidate rejected: {error}") from error
         print(f"Release target {version} is available for checkout {checkout}.")
         return
-    manifest = json.loads((ROOT / "versions/manifest.json").read_text(encoding="utf-8"))
+    manifest = json.loads(git("show", f"{checkout}:versions/manifest.json"))
     run_id = os.environ["GITHUB_RUN_ID"]
     run_url = f"{os.environ['GITHUB_SERVER_URL']}/{repository}/actions/runs/{run_id}"
     attempt = int(os.environ["GITHUB_RUN_ATTEMPT"])
