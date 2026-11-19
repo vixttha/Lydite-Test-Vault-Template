@@ -213,13 +213,17 @@ def read_manifest(folder, seen):
     return manifest
 
 
-def read_inventory(directory):
+def read_inventory(directory, *, selected=None):
     if directory.is_symlink():
         raise ValueError(f"{directory}: inventory root must be a real directory")
     inventory = {}
     seen = set()
     for folder in sorted(directory.iterdir()):
         if not folder.is_dir():
+            continue
+        manifest = folder / "metadata.json"
+        if (folder.name != selected and not manifest.exists() and not manifest.is_symlink()
+                and not ((folder / "GUIDE.md").is_file() and (folder / "tests").is_dir())):
             continue
         if folder.is_symlink() or folder.resolve() != directory.resolve() / folder.name:
             raise ValueError(f"{folder}: language root must stay inside the inventory")
@@ -465,7 +469,7 @@ def main():
     if args.evidence and not (args.run or args.runner):
         parser.error("--evidence requires --run or --runner")
     try:
-        inventory = read_inventory(ROOT / "languages")
+        inventory = read_inventory(ROOT / "languages", selected=args.run)
         if args.run:
             if args.run not in inventory:
                 raise ValueError(f"Unknown language folder: {args.run}")

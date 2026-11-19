@@ -23,6 +23,9 @@ def verify(output, work):
     shutil.copytree(STARTER, project, ignore=shutil.ignore_patterns("__pycache__"))
     shutil.copytree(ROOT / "languages/python", project / "languages/python",
                     ignore=shutil.ignore_patterns("__pycache__"))
+    translations = project / "languages" / "en"
+    translations.mkdir()
+    (translations / "messages.json").write_text('{"hello":"Hello"}\n', encoding="utf-8")
     (project / "tools").mkdir()
     for name in ("inventory.py", "native_outcomes.py"):
         shutil.copy2(ROOT / "tools" / name, project / "tools" / name)
