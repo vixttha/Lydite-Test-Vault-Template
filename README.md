@@ -18,3 +18,7 @@ This template is the stone; your code is the metal. Instead of relying on "it wo
 Run `python tools/inventory.py` from the repository root to see each language, runtime, runner, declared case count, and test-file count. The inventory validates the metadata against files on disk. Each case holds its purpose, test path, and command arguments. Language folders include a small runnable example that you can adapt to your own project's entry point.
 
 A **declared case** is one named behavior in the metadata. Several assertions can belong to one case. A **runner result** records the case outcome for the checkout and environment that actually ran it. See the [test guide](docs/testing.md) for the workflow.
+
+## License
+
+Lydite is available under the [MIT License](LICENSE). Include a copy of the license when you copy the starter or examples into another project. Third-party dependencies and linked projects have their own license terms.
