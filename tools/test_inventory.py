@@ -196,6 +196,25 @@ class CommandOutcomeTests(unittest.TestCase):
                     commands[stage] = [sys.executable, "-c", "raise SystemExit(3)"]
                     self.assertEqual(execute_case({**case, "commands": commands}, directory, os.environ)[0], "FAIL")
 
+    def test_receipt_preserves_plan_and_reports_short_circuiting(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "languages/fixture").mkdir(parents=True)
+            output = root / "evidence.json"
+            stages = [[sys.executable, "-c", "raise SystemExit(5)"], [sys.executable, "-c", "pass"]]
+            case = {"id": "STAGES-001", "purpose": "distinguish stages", "test": "tests/sample.py", "commands": stages}
+            manifest = {"cases": [case], "runner": "ubuntu-24.04", "runtime": "Python"}
+            with patch("inventory.ROOT", root), patch.dict(os.environ, {"GITHUB_ACTIONS": "false"}):
+                for code, outcomes in ((1, ["FAIL", "NOT_RUN"]), (0, ["PASS", "PASS"])):
+                    with redirect_stdout(io.StringIO()):
+                        self.assertEqual(run_cases({"fixture": manifest}, ["fixture"], output), code)
+                    record = json.loads(output.read_text(encoding="utf-8"))["cases"][0]
+                    self.assertEqual(record["commands"], stages)
+                    self.assertEqual([stage["outcome"] for stage in record["command_results"]], outcomes)
+                    self.assertEqual([stage["exit_code"] for stage in record["command_results"]],
+                                     [5, None] if code else [0, 0])
+                    stages[0][-1] = "pass"
+
 
 class CheckoutIdentityTests(unittest.TestCase):
     def test_exact_identity_requires_clean_inputs_and_the_intended_root(self):

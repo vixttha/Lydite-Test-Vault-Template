@@ -145,7 +145,27 @@ class CheckoutDrift(RuntimeError):
     """A verified checkout changed during execution."""
 
 
-def execute_case(case, folder, env, *, timeout=180, guard=None):
+def command_status(command, folder, env, timeout):
+    try:
+        result = subprocess.run(
+            command, cwd=folder, env=env, check=False, timeout=timeout,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace",
+        )
+    except subprocess.TimeoutExpired as error:
+        if error.stdout:
+            print(error.stdout.decode(errors="replace"), end="", flush=True)
+        return "FAIL", f"{command[0]} timed out after {timeout:g}s", None, ""
+    except FileNotFoundError:
+        return "BLOCKED", f"required executable unavailable: {command[0]}", None, ""
+    except OSError as error:
+        return "BLOCKED", f"cannot start {command[0]}: {error}", None, ""
+    print(result.stdout, end="", flush=True)
+    if result.returncode:
+        return "FAIL", f"{command[0]} exited with code {result.returncode}", result.returncode, result.stdout
+    return "PASS", "command completed", result.returncode, result.stdout
+
+
+def execute_case(case, folder, env, *, timeout=180, guard=None, command_results=None):
     native_output = ""
     commands = case["commands"]
     native_index = case.get("native_command_index", len(commands) - 1)
@@ -156,27 +176,15 @@ def execute_case(case, folder, env, *, timeout=180, guard=None):
             command = [arg.replace("{tmp}", temp) for arg in argv]
             if case.get("native_runner") == "unittest" and index == native_index:
                 command = unittest_command(command)
-            try:
-                result = subprocess.run(
-                    command, cwd=folder, env=env, check=False, timeout=timeout,
-                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace",
-                )
-            except subprocess.TimeoutExpired as error:
-                if error.stdout:
-                    print(error.stdout.decode(errors="replace"), end="", flush=True)
-                return "FAIL", f"{argv[0]} timed out after {timeout:g}s"
-            except FileNotFoundError:
-                return "BLOCKED", f"required executable unavailable: {argv[0]}"
-            except OSError as error:
-                return "BLOCKED", f"cannot start {argv[0]}: {error}"
-            finally:
-                if guard:
-                    guard()
+            status, reason, exit_code, output = command_status(command, folder, env, timeout)
+            if command_results is not None:
+                command_results[index].update(outcome=status, detail=reason, exit_code=exit_code)
+            if guard:
+                guard()
+            if status != "PASS":
+                return status, reason
             if index == native_index:
-                native_output = result.stdout
-            print(result.stdout, end="", flush=True)
-            if result.returncode:
-                return "FAIL", f"{argv[0]} exited with code {result.returncode}"
+                native_output = output
     if native := case.get("native_runner"):
         try:
             if not passed_tests(native, native_output):
@@ -290,6 +298,10 @@ def run_cases(inventory, languages, evidence=None):
             except CheckoutDrift:
                 drifted = True
         for case in manifest["cases"]:
+            command_results = [
+                {"index": index, "outcome": "NOT_RUN", "detail": "stage not reached", "exit_code": None}
+                for index in range(len(case["commands"]))
+            ]
             print(f'{case["id"]} | {case["purpose"]}', flush=True)
             if drifted:
                 status, reason = "BLOCKED", "tracked checkout changed during this run"
@@ -299,7 +311,7 @@ def run_cases(inventory, languages, evidence=None):
                 status, reason = "BLOCKED", "declared runtime version probe failed"
             else:
                 try:
-                    status, reason = execute_case(case, folder, env, guard=guard)
+                    status, reason = execute_case(case, folder, env, guard=guard, command_results=command_results)
                 except CheckoutDrift as error:
                     drifted = True
                     status, reason = "FAIL", str(error)
@@ -307,7 +319,7 @@ def run_cases(inventory, languages, evidence=None):
             report["cases"].append({
                 "case_id": case["id"], "language": slug, "test": case["test"],
                 "declared_runner": manifest["runner"], "declared_runtime": manifest["runtime"],
-                "observed_runtime": runtime, "commands": case["commands"],
+                "observed_runtime": runtime, "commands": case["commands"], "command_results": command_results,
                 "outcome": status, "detail": reason,
             })
     if drifted:
