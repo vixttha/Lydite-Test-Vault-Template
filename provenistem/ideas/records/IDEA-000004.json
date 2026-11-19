@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "id": "IDEA-000004",
+  "title": "Reject ambiguous shared JSON observations",
+  "summary": "Require the same unique-key JSON rule in both shared-evidence readers before awarding a PASS.",
+  "kind": "architecture",
+  "origin": {
+    "created_by": "imported",
+    "source": "https://github.com/vixttha/Lydite-Test-Vault-Template/issues/21"
+  },
+  "lifecycle_status": "triaged",
+  "implementation_status": "not_applicable",
+  "testing": {
+    "status": "untested"
+  },
+  "importance": "low",
+  "complexity": "medium",
+  "categories": [
+    "receipts",
+    "json"
+  ],
+  "benefits": [
+    "Makes the independent implementations agree on ambiguous inputs"
+  ],
+  "risks": [
+    "Both parsers need a compatible way to detect repeated keys"
+  ],
+  "related_ideas": [],
+  "evidence": [
+    {
+      "relation": "context",
+      "claim": "The shared example currently decodes the observation using the default object parser.",
+      "repository": "vixttha/Lydite-Test-Vault-Template",
+      "commit": "c5b02ca5a18df5a9fc3094b7f566d3c8db995408",
+      "path": "starter/test-vault/examples/shared-evidence/check.py"
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "id": "IDEA-000005",
+  "title": "Check pinned archive file modes",
+  "summary": "Compare Git file modes as well as blob contents so executable-bit drift cannot pass archival checks.",
+  "kind": "architecture",
+  "origin": {
+    "created_by": "imported",
+    "source": "https://github.com/vixttha/Lydite-Test-Vault-Template/issues/17"
+  },
+  "lifecycle_status": "triaged",
+  "implementation_status": "not_applicable",
+  "testing": {
+    "status": "untested"
+  },
+  "importance": "medium",
+  "complexity": "low",
+  "categories": [
+    "graphify",
+    "archives"
+  ],
+  "benefits": [
+    "Preserves the full pinned Git record"
+  ],
+  "risks": [
+    "The check should use Git’s index so the result is not host filesystem dependent"
+  ],
+  "related_ideas": [],
+  "evidence": [
+    {
+      "relation": "supports",
+      "claim": "Draft PR #32 implements and exercises a mode-only archive drift regression.",
+      "repository": "vixttha/Lydite-Test-Vault-Template",
+      "commit": "3b266281c90380ab982307ee5210e701ce4611f4",
+      "path": "tools/graphify/version_maps.py"
+    }
+  ]
+}

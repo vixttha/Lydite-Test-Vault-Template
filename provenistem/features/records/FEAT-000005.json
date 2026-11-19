@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "FEAT-000005",
+  "title": "Shared check-plan identity",
+  "summary": "Carry the selected case-plan identity in receipts so the verifier can compare the plan used at execution time.",
+  "kind": "capability",
+  "lifecycle_status": "proposed",
+  "implementation_status": "not_planned",
+  "idea_ids": [
+    "IDEA-000002"
+  ],
+  "acceptance_criteria": [
+    "Reject a changed required check set",
+    "Document and verify backward compatibility"
+  ],
+  "testing": {
+    "status": "untested"
+  },
+  "evidence": [],
+  "release_membership": "NOT_ASSERTED"
+}

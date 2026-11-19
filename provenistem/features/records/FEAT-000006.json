@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "FEAT-000006",
+  "title": "Fixture directory confinement",
+  "summary": "Use resolved paths to keep primary and support files within the intended tests directory.",
+  "kind": "capability",
+  "lifecycle_status": "proposed",
+  "implementation_status": "not_planned",
+  "idea_ids": [
+    "IDEA-000003"
+  ],
+  "acceptance_criteria": [
+    "Reject a fixture resolving outside the tests root",
+    "Preserve normal in-tree fixture discovery"
+  ],
+  "testing": {
+    "status": "untested"
+  },
+  "evidence": [],
+  "release_membership": "NOT_ASSERTED"
+}

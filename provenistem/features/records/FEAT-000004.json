@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "FEAT-000004",
+  "title": "Native test identity for each case",
+  "summary": "Record proof that the native test executed belongs to the case requesting the outcome.",
+  "kind": "capability",
+  "lifecycle_status": "proposed",
+  "implementation_status": "not_planned",
+  "idea_ids": [
+    "IDEA-000001"
+  ],
+  "acceptance_criteria": [
+    "Reject a result from a different passing test",
+    "Preserve multi-stage commands with an explicit test stage"
+  ],
+  "testing": {
+    "status": "untested"
+  },
+  "evidence": [],
+  "release_membership": "NOT_ASSERTED"
+}

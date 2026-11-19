@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "FEAT-000007",
+  "title": "Strict shared observation decoding",
+  "summary": "Have the Python and Node examples reject duplicate keys in shared observation JSON.",
+  "kind": "capability",
+  "lifecycle_status": "proposed",
+  "implementation_status": "not_planned",
+  "idea_ids": [
+    "IDEA-000004"
+  ],
+  "acceptance_criteria": [
+    "Reject an observation containing repeated keys",
+    "Preserve the valid shared-evidence rehearsal"
+  ],
+  "testing": {
+    "status": "untested"
+  },
+  "evidence": [],
+  "release_membership": "NOT_ASSERTED"
+}

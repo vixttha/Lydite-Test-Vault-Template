@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "id": "FEAT-000003",
+  "title": "Pinned Graphify archive-mode verification",
+  "summary": "Stacked draft PR #32 compares archive Git modes with pinned upstream trees while preserving historical map contents.",
+  "kind": "capability",
+  "lifecycle_status": "verified",
+  "implementation_status": "implemented",
+  "idea_ids": [
+    "IDEA-000005"
+  ],
+  "acceptance_criteria": [
+    "Pass the archived map comparison",
+    "Reject a mode-only archive change"
+  ],
+  "testing": {
+    "status": "tested",
+    "outcome": "pass",
+    "refs": [
+      "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44500407187"
+    ]
+  },
+  "evidence": [
+    {
+      "kind": "test",
+      "claim": "Public PR validation verified archive and graph drift checks for the stacked branch.",
+      "source_sha": "3b266281c90380ab982307ee5210e701ce4611f4",
+      "source_path": "tools/graphify/version_maps.py",
+      "receipt": "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44500407187"
+    }
+  ],
+  "release_membership": "NOT_ASSERTED"
+}

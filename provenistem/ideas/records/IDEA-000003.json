@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "id": "IDEA-000003",
+  "title": "Keep manifest fixtures inside the tests tree",
+  "summary": "Require fixture discovery and execution to agree on where primary tests and support files resolve.",
+  "kind": "architecture",
+  "origin": {
+    "created_by": "imported",
+    "source": "https://github.com/vixttha/Lydite-Test-Vault-Template/issues/20"
+  },
+  "lifecycle_status": "triaged",
+  "implementation_status": "not_applicable",
+  "testing": {
+    "status": "untested"
+  },
+  "importance": "medium",
+  "complexity": "medium",
+  "categories": [
+    "catalog",
+    "portability"
+  ],
+  "benefits": [
+    "Makes inventory portable across clean consumer checkouts"
+  ],
+  "risks": [
+    "Filesystem link behavior differs across host platforms"
+  ],
+  "related_ideas": [],
+  "evidence": [
+    {
+      "relation": "context",
+      "claim": "Inventory enumerates file entries under the declared tests directory.",
+      "repository": "vixttha/Lydite-Test-Vault-Template",
+      "commit": "c5b02ca5a18df5a9fc3094b7f566d3c8db995408",
+      "path": "tools/inventory.py"
+    }
+  ]
+}

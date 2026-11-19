@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "id": "FEAT-000001",
+  "title": "Reusable Vault starter and language inventory",
+  "summary": "The current main-branch foundation includes the copy-in starter and runnable examples grouped by language.",
+  "kind": "capability",
+  "lifecycle_status": "verified",
+  "implementation_status": "implemented",
+  "idea_ids": [],
+  "acceptance_criteria": [
+    "Build a clean host fixture from the starter",
+    "List and run the available language examples"
+  ],
+  "testing": {
+    "status": "tested",
+    "outcome": "pass",
+    "refs": [
+      "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44475200133"
+    ]
+  },
+  "evidence": [
+    {
+      "kind": "test",
+      "claim": "Public validation passed on the current main baseline.",
+      "source_sha": "fe7b00aa17862d7a01dfd15481594be837bc6d9f",
+      "source_path": "docs/testing.md",
+      "receipt": "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44475200133"
+    }
+  ],
+  "release_membership": "NOT_ASSERTED"
+}

@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "id": "IDEA-000006",
+  "title": "Keep the candidate changelog in sync with merged checkpoints",
+  "summary": "Prepare release notes from the combined reviewed commit, including the current numbered checkpoint range and its exact public CI evidence.",
+  "kind": "process",
+  "origin": {
+    "created_by": "imported",
+    "source": "https://github.com/vixttha/Lydite-Test-Vault-Template/issues/33"
+  },
+  "lifecycle_status": "triaged",
+  "implementation_status": "not_applicable",
+  "testing": {
+    "status": "untested"
+  },
+  "importance": "medium",
+  "complexity": "low",
+  "categories": [
+    "release",
+    "documentation"
+  ],
+  "benefits": [
+    "Gives reviewers a reliable scope and evidence map"
+  ],
+  "risks": [
+    "A draft summary can become stale as stacked work lands"
+  ],
+  "related_ideas": [],
+  "evidence": [
+    {
+      "relation": "context",
+      "claim": "The candidate document still names the first fifteen checkpoints.",
+      "repository": "vixttha/Lydite-Test-Vault-Template",
+      "commit": "c5b02ca5a18df5a9fc3094b7f566d3c8db995408",
+      "path": "docs/release-candidate.md"
+    }
+  ]
+}
