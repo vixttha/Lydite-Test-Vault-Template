@@ -15,11 +15,15 @@
       "commands": [
         [
           "dotnet",
-          "run",
-          "--project",
+          "build",
           "tests/Contracts.csproj",
-          "--artifacts-path",
-          "{tmp}/dotnet"
+          "--output",
+          "{tmp}/dotnet",
+          "-p:BaseIntermediateOutputPath={tmp}/obj/"
+        ],
+        [
+          "dotnet",
+          "{tmp}/dotnet/Contracts.dll"
         ]
       ]
     }
