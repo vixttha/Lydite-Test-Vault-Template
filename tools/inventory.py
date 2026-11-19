@@ -17,14 +17,19 @@ CASE_ID = re.compile(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-[0-9]{3,}")
 RUNNERS = {"ubuntu-24.04", "windows-latest"}
 
 
+def test_path(folder, name):
+    path = PurePosixPath(name)
+    if len(path.parts) < 2 or path.parts[0] != "tests" or ".." in path.parts or "\\" in name:
+        raise ValueError(f"{folder.name}: expected a path within tests/: {name}")
+    return path.as_posix()
+
+
 def check_files(folder, cases):
     declared = set()
     for case in cases:
-        for name in [case["test"], *case["support"]]:
-            path = PurePosixPath(name)
-            if len(path.parts) < 2 or path.parts[0] != "tests" or ".." in path.parts:
-                raise ValueError(f"{folder.name}: expected a path within tests/: {name}")
-            declared.add(path.as_posix())
+        case["test"] = test_path(folder, case["test"])
+        case["support"] = [test_path(folder, name) for name in case["support"]]
+        declared.update([case["test"], *case["support"]])
 
     actual = {
         path.relative_to(folder).as_posix()

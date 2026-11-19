@@ -1,3 +1,5 @@
+from contextlib import redirect_stdout
+import io
 import json
 import os
 import sys
@@ -5,7 +7,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from inventory import execute_case, read_inventory
+from inventory import execute_case, print_inventory, read_inventory
 from native_outcomes import passed_tests
 
 
@@ -67,6 +69,24 @@ class InventoryTests(unittest.TestCase):
                 path.write_text(mutation, encoding="utf-8")
                 with self.assertRaisesRegex(ValueError, f"metadata.json: .*{diagnosis}"):
                     read_inventory(self.root)
+
+    def test_case_paths_are_normalized_before_counting(self):
+        test = self.add_language("one", "CHECK-001")
+        fixture = test.with_name("fixture.txt")
+        fixture.touch()
+        test.with_name("second.py").touch()
+        path = self.root / "one" / "metadata.json"
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        base = manifest["cases"][0]
+        manifest["cases"] += [
+            {**base, "id": "CHECK-002", "test": "tests/./check.py", "support": ["tests/./fixture.txt"]},
+            {**base, "id": "CHECK-003", "test": "tests/second.py"},
+        ]
+        path.write_text(json.dumps(manifest), encoding="utf-8")
+        output = io.StringIO()
+        with redirect_stdout(output):
+            print_inventory(read_inventory(self.root))
+        self.assertIn("| 3 | 2 |", output.getvalue())
 
 
 class NativeOutcomeTests(unittest.TestCase):
