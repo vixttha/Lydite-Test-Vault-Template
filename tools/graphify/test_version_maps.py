@@ -50,6 +50,13 @@ class ArchiveTests(unittest.TestCase):
             self.assertTrue(any(edge["relation"] == "links_to" and edge["target"] == "file:setup/README.md"
                                 for edge in graph["links"]))
 
+    def test_archive_reference_links_map_used_destinations_only(self):
+        with TemporaryDirectory() as directory:
+            graph = self.archived_graph(directory, "[Guide][id]\n\n[id]: guide.md\n[unused]: other.md\n",
+                                        {"guide.md": "# Guide\n", "other.md": "# Unused\n"})
+            targets = [edge["target"] for edge in graph["links"] if edge["relation"] == "links_to"]
+            self.assertEqual(targets, ["file:guide.md"])
+
     def test_binary_and_latin1_sources_keep_pinned_bytes(self):
         with TemporaryDirectory() as directory:
             root = Path(directory) / "source-repo"
