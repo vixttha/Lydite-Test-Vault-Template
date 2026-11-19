@@ -2,10 +2,10 @@
   "schema_version": 1,
   "id": "FEAT-000006",
   "title": "Fixture directory confinement",
-  "summary": "Use resolved paths to keep primary and support files within the intended tests directory.",
+  "summary": "v0.0.4 requires declared test roots and fixture files to resolve within the intended tests directory.",
   "kind": "capability",
-  "lifecycle_status": "proposed",
-  "implementation_status": "not_planned",
+  "lifecycle_status": "verified",
+  "implementation_status": "implemented",
   "idea_ids": [
     "IDEA-000003"
   ],
@@ -14,8 +14,20 @@
     "Preserve normal in-tree fixture discovery"
   ],
   "testing": {
-    "status": "untested"
+    "status": "tested",
+    "outcome": "pass",
+    "refs": [
+      "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44506598515/job/135499713793"
+    ]
   },
-  "evidence": [],
+  "evidence": [
+    {
+      "kind": "test",
+      "claim": "The focused inventory suite passed the redirected-root and escaped-fixture regressions.",
+      "source_sha": "87d25d80d3154d295052412b64b29a0f0f152c27",
+      "source_path": "tools/inventory.py",
+      "receipt": "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44506598515/job/135499713793"
+    }
+  ],
   "release_membership": "NOT_ASSERTED"
 }

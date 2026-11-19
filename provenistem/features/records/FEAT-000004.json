@@ -2,10 +2,10 @@
   "schema_version": 1,
   "id": "FEAT-000004",
   "title": "Native test identity for each case",
-  "summary": "Record proof that the native test executed belongs to the case requesting the outcome.",
+  "summary": "v0.0.4 binds a case verdict to its declared native test using named native outcomes or a verified direct or build-and-run test stage.",
   "kind": "capability",
-  "lifecycle_status": "proposed",
-  "implementation_status": "not_planned",
+  "lifecycle_status": "verified",
+  "implementation_status": "implemented",
   "idea_ids": [
     "IDEA-000001"
   ],
@@ -14,8 +14,22 @@
     "Preserve multi-stage commands with an explicit test stage"
   ],
   "testing": {
-    "status": "untested"
+    "status": "tested",
+    "outcome": "pass",
+    "refs": [
+      "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44506598515/job/135499713793",
+      "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44506598515/job/135499713889",
+      "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44506598515/job/135499713814"
+    ]
   },
-  "evidence": [],
+  "evidence": [
+    {
+      "kind": "test",
+      "claim": "The focused inventory suite and public language jobs passed, including declared test binding and native outcomes.",
+      "source_sha": "87d25d80d3154d295052412b64b29a0f0f152c27",
+      "source_path": "tools/inventory.py",
+      "receipt": "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44506598515/job/135499713793"
+    }
+  ],
   "release_membership": "NOT_ASSERTED"
 }

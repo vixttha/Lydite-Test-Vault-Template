@@ -1,8 +1,8 @@
 # One shared observation in Node.js and Python
 
-The Node.js test invokes a CLI that quotes three units at 125 cents and saves its JSON output. The Python check derives the expected total independently. Both suites write their own receipt for the same observation.
+The Node.js test invokes a CLI that quotes three units at 125 cents and saves its JSON output. The CLI requires two unsigned decimal integers and a total within the safe integer range. The Python check derives the expected total independently. Both readers reject repeated JSON object keys and hash the original observed bytes. Both suites write their own v2 receipt for the same observation and exact case plan.
 
-From an existing Git checkout with the starter installed, add `CLI-001` to its catalog. Register the `CLI` topic too if your catalog uses a topic registry. Run from the checkout root using Node.js 24 and Python 3.12. For a local example, set positive sample run and attempt IDs before running the following steps, or use the IDs provided by GitHub Actions.
+From an existing Git checkout with the starter installed, add `CLI-001` to its catalog. Register the `CLI` topic too if your catalog uses a topic registry. Commit these changes and the installed files before running the receipt example. Run from the checkout root using Node.js 24 and Python 3.12. For a local example, set positive sample run and attempt IDs before running the following steps, or use the IDs provided by GitHub Actions.
 
 ```bash
 export GITHUB_RUN_ID=${GITHUB_RUN_ID:-1}

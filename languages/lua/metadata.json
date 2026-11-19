@@ -3,6 +3,7 @@
   "language": "Lua",
   "runtime": "Lua 5.4",
   "runner": "ubuntu-24.04",
+  "runtime_probe": ["lua5.4", "-v"],
   "cases": [
     {
       "id": "LUA-001",

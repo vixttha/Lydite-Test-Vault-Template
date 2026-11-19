@@ -8,10 +8,14 @@
     "created_by": "imported",
     "source": "https://github.com/vixttha/Lydite-Test-Vault-Template/issues/21"
   },
-  "lifecycle_status": "triaged",
-  "implementation_status": "not_applicable",
+  "lifecycle_status": "adopted",
+  "implementation_status": "implemented",
   "testing": {
-    "status": "untested"
+    "status": "tested",
+    "outcome": "pass",
+    "refs": [
+      "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44506598515/job/135499713793"
+    ]
   },
   "importance": "low",
   "complexity": "medium",
@@ -29,10 +33,22 @@
   "evidence": [
     {
       "relation": "context",
-      "claim": "The shared example currently decodes the observation using the default object parser.",
+      "claim": "Before the v0.0.4 release: The shared example currently decodes the observation using the default object parser.",
       "repository": "vixttha/Lydite-Test-Vault-Template",
       "commit": "c5b02ca5a18df5a9fc3094b7f566d3c8db995408",
       "path": "starter/test-vault/examples/shared-evidence/check.py"
+    },
+    {
+      "relation": "supports",
+      "claim": "The Python and Node shared-evidence examples in v0.0.4 reject duplicate keys in observation JSON and preserve the original evidence bytes in failing receipts.",
+      "repository": "vixttha/Lydite-Test-Vault-Template",
+      "commit": "87d25d80d3154d295052412b64b29a0f0f152c27",
+      "path": "starter/test-vault/examples/shared-evidence/check.py"
     }
-  ]
+  ],
+  "decision": {
+    "decided_by": "owner",
+    "decided_at": "2026-11-19T10:42:14Z",
+    "reason": "Included in the owner-approved publication of Lydite v0.0.4. https://github.com/vixttha/Lydite-Test-Vault-Template/releases/tag/v0.0.4"
+  }
 }

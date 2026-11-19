@@ -2,7 +2,9 @@
 
 Lydite's host-local Ideas and Features library uses the portable Provenistem v0.0.2 record format. Use the [Ideas index](ideas/INDEX.md) for possibilities and their source issues and the [Features index](features/INDEX.md) for capabilities and scoped verification.
 
-The initial records distinguish the main-branch starter, verified draft work and proposed fixes. Evidence for a draft applies to its cited commit. Release membership remains `NOT_ASSERTED`. GitHub issues, pull requests and release records remain the engineering sources.
+The initial six Ideas were adopted and all seven Features were verified for [Lydite v0.0.4](https://github.com/vixttha/Lydite-Test-Vault-Template/releases/tag/v0.0.4). The tag points to `87d25d80d3154d295052412b64b29a0f0f152c27`. The [public run](https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44506598515) and [candidate receipt](https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44506598515/artifacts/14519447654) identify that checkout. The changelog Idea records the publication decision and links the release. Feature test claims cite the jobs that exercised each capability.
+
+The portable schema keeps `release_membership` at `NOT_ASSERTED`. Use the tagged release, linked source and runner evidence to establish what shipped. Use the lifecycle and implementation fields to distinguish a proposal from work that has been adopted or implemented.
 
 ## Maintain records
 

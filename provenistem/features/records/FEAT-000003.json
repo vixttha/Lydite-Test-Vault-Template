@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "FEAT-000003",
   "title": "Pinned Graphify archive-mode verification",
-  "summary": "Stacked draft PR #32 compares archive Git modes with pinned upstream trees while preserving historical map contents.",
+  "summary": "v0.0.4 compares historical archive Git modes and blob contents with the pinned upstream trees and verifies the rebuilt Graphify maps.",
   "kind": "capability",
   "lifecycle_status": "verified",
   "implementation_status": "implemented",
@@ -17,16 +17,16 @@
     "status": "tested",
     "outcome": "pass",
     "refs": [
-      "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44500407187"
+      "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44506598515/job/135499713772"
     ]
   },
   "evidence": [
     {
       "kind": "test",
-      "claim": "Public PR validation verified archive and graph drift checks for the stacked branch.",
-      "source_sha": "3b266281c90380ab982307ee5210e701ce4611f4",
+      "claim": "The public archive job rebuilt the maps and rejected archive mode, archive byte and graph byte drift.",
+      "source_sha": "87d25d80d3154d295052412b64b29a0f0f152c27",
       "source_path": "tools/graphify/version_maps.py",
-      "receipt": "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44500407187"
+      "receipt": "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44506598515/job/135499713772"
     }
   ],
   "release_membership": "NOT_ASSERTED"

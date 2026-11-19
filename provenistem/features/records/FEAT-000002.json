@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "FEAT-000002",
   "title": "Per-case command outcomes and evidence",
-  "summary": "Draft PR #22 emits machine-readable command-stage outcomes and ties public evidence to its checked-out commit. Declared test identity remains an open issue.",
+  "summary": "v0.0.4 records the declared commands, executed and unstarted stages, observed runtime and outcomes for each case, and checks the checkout identity.",
   "kind": "capability",
   "lifecycle_status": "verified",
   "implementation_status": "implemented",
@@ -15,16 +15,17 @@
     "status": "tested",
     "outcome": "pass",
     "refs": [
-      "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44499978113"
+      "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44506598515/job/135499713889",
+      "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44506598515/job/135499713814"
     ]
   },
   "evidence": [
     {
       "kind": "test",
-      "claim": "Public candidate validation passed, including command-stage records and install evidence.",
-      "source_sha": "c5b02ca5a18df5a9fc3094b7f566d3c8db995408",
+      "claim": "The public language jobs passed and uploaded machine-readable per-case evidence for the released checkout.",
+      "source_sha": "87d25d80d3154d295052412b64b29a0f0f152c27",
       "source_path": "tools/inventory.py",
-      "receipt": "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44499978113"
+      "receipt": "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44506598515/job/135499713889"
     }
   ],
   "release_membership": "NOT_ASSERTED"

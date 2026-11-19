@@ -73,7 +73,9 @@ def check_project(sample, target):
 
 
 def copy_and_check(sample, target):
-    shutil.copytree(STARTER, target)
+    shutil.copytree(STARTER, target, ignore=shutil.ignore_patterns("__pycache__"))
+    if (target / "test-vault/LICENSE").read_bytes() != (ROOT / "LICENSE").read_bytes():
+        raise RuntimeError("The copied starter is missing the project MIT notice")
     run(["git", "init", "-q", "-b", "trunk"], target)
     run(["git", "add", "."], target)
     run(["git", "-c", "user.name=Test Vault Fixture", "-c", "user.email=fixture@example.invalid",
@@ -113,6 +115,29 @@ def copy_and_check(sample, target):
         example = f"{fence}markdown\n{HEADER}{DIVIDER}{row}{fence}\n\n"
         case_path.write_text(example + catalog, encoding="utf-8")
         run(command, target, includes="1 unique cases across 1 topics")
+
+    def without_outer_pipes(line):
+        return line.strip().removeprefix("|").removesuffix("|").strip() + "\n"
+
+    bare_table = "".join("   " + without_outer_pipes(line) for line in (HEADER, DIVIDER, row))
+    case_path.write_text(bare_table, encoding="utf-8")
+    run(command, target, includes="1 unique cases across 1 topics")
+    case_path.write_text("".join("    " + line for line in (HEADER, DIVIDER, row)), encoding="utf-8")
+    run(command, target, result=1, includes="no cases found")
+    hidden_row = "| HIDDEN-001 | Hidden example | P0 | Fixture | Omit from case index |\n"
+    commented = "<!-- example only\n" + HEADER + DIVIDER + hidden_row + "-->\n"
+    case_path.write_text(commented, encoding="utf-8")
+    run(command, target, result=1, includes="no cases found")
+    for mixed in (commented + catalog, catalog + commented):
+        case_path.write_text(mixed, encoding="utf-8")
+        run([*command, "--topics", str(topics_path)], target, includes="1 unique cases across 1 topics")
+    hidden_manifest = target / "hidden-case.json"
+    hidden_manifest.write_text(
+        '{"schema_version":1,"case_id":"HIDDEN-001","required_checks":["fixture"],"shared_evidence":false}',
+        encoding="utf-8",
+    )
+    run([sys.executable, "test-vault/verify_receipts.py", "--case", str(hidden_manifest),
+         "--receipts", "receipts"], target, result=1, includes="case ID must be registered")
     case_path.write_text(catalog, encoding="utf-8")
     run(workflow_step, target, env=env, includes="Catalog result: PASS")
     case_path.write_text(catalog + "  " + row.replace("| P0 |", "| P9 |"), encoding="utf-8")

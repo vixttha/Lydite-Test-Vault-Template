@@ -3,6 +3,7 @@
   "language": "Bash",
   "runtime": "Bash",
   "runner": "ubuntu-24.04",
+  "runtime_probe": ["bash", "--version"],
   "cases": [
     {
       "id": "BASH-001",

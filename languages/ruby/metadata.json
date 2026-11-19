@@ -3,6 +3,7 @@
   "language": "Ruby",
   "runtime": "Ruby / standalone script",
   "runner": "ubuntu-24.04",
+  "runtime_probe": ["ruby", "--version"],
   "cases": [
     {
       "id": "RUBY-001",
