@@ -41,13 +41,12 @@ def git(*args):
 def fetch_source(commit):
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
         raise ValueError("expected a full pinned upstream commit")
-    query = subprocess.run(
-        ["git", "-C", str(ROOT), "cat-file", "-e", f"{commit}^{{commit}}"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
-    )
-    if query.returncode:
+    try:
         git("fetch", "--no-tags", "--depth=1", UPSTREAM, commit)
-        git("cat-file", "-e", f"{commit}^{{commit}}")
+    except subprocess.CalledProcessError as error:
+        raise ValueError(f"Could not verify archive pin {commit} against {UPSTREAM}") from error
+    if git("rev-parse", "FETCH_HEAD^{commit}").decode("ascii").strip() != commit:
+        raise ValueError(f"Public upstream returned a different archive pin for {commit}")
 
 
 def read_archive(tag, record):
@@ -239,6 +238,8 @@ def main():
     if (manifest["current"] not in versions or frames != versions.keys()
             or not all(VERSION.fullmatch(tag) for tag in versions)):
         raise ValueError("Version manifest and archive folders do not match")
+    scope = "public upstream" if args.fetch_upstream else "local Git objects only"
+    print(f"Archive source verification: {scope}.")
     sorted_versions = sorted(versions, key=lambda tag: tuple(map(int, tag[1:].split("."))), reverse=True)
     for tag in sorted_versions:
         record = versions[tag]
