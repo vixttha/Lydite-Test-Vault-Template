@@ -236,7 +236,7 @@ def main():
     manifest = load_manifest((ARCHIVE / "manifest.json").read_text(encoding="utf-8"))
     versions = manifest["versions"]
     frames = {path.name for path in ARCHIVE.iterdir() if path.is_dir()}
-    if (manifest["schema_version"] != 1 or manifest["current"] not in versions or frames != versions.keys()
+    if (manifest["current"] not in versions or frames != versions.keys()
             or not all(VERSION.fullmatch(tag) for tag in versions)):
         raise ValueError("Version manifest and archive folders do not match")
     sorted_versions = sorted(versions, key=lambda tag: tuple(map(int, tag[1:].split("."))), reverse=True)

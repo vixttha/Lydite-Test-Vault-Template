@@ -576,6 +576,11 @@ class ReleaseEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "duplicate archive manifest field"):
             load_manifest('{"versions":{"v0.0.1":{"source_commit":"a","source_commit":"b"}}}')
 
+    def test_archive_manifest_rejects_boolean_schema(self):
+        with self.assertRaisesRegex(ValueError, "schema_version must be integer"):
+            load_manifest('{"schema_version":true}')
+        self.assertEqual(load_manifest('{"schema_version":1}'), {"schema_version": 1})
+
     def test_github_state_treats_only_expected_not_found_as_missing(self):
         for status in (403, 404, 429, 503):
             with self.subTest(status=status), patch.dict(os.environ, {"GITHUB_API_URL": "https://example.invalid"}):
