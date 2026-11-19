@@ -213,6 +213,16 @@ class NativeOutcomeTests(unittest.TestCase):
             self.assertEqual(execute_case({**case, "native_test": actual}, directory, os.environ)[0], "PASS")
             self.assertEqual(execute_case({**case, "native_test": different}, directory, os.environ)[0], "FAIL")
 
+    @unittest.skipUnless(shutil.which("node"), "Node is needed for named test regression checks")
+    def test_node_native_names_preserve_whitespace(self):
+        with TemporaryDirectory() as directory, redirect_stdout(io.StringIO()):
+            test = Path(directory) / "fixture.test.mjs"
+            test.write_text("import {test} from 'node:test';\ntest(' name ', () => {});\n")
+            case = {"native_runner": "node-tap", "test": test.name,
+                    "commands": [["node", "--test", "--test-reporter=tap", str(test)]]}
+            self.assertEqual(execute_case({**case, "native_test": " name "}, directory, os.environ)[0], "PASS")
+            self.assertEqual(execute_case({**case, "native_test": "name"}, directory, os.environ)[0], "FAIL")
+
     def test_unittest_records_passes_alongside_setup_and_subtest_skips(self):
         with TemporaryDirectory() as directory:
             test = Path(directory) / "test_fixture.py"
