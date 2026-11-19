@@ -149,6 +149,7 @@ jobs:
           ruby --version
           rustc --version
       - name: Run language examples
+        id: run-cases
         shell: bash
         env:
           LYDITE_RUNNER: ${{ matrix.runner }}
@@ -156,8 +157,26 @@ jobs:
           set -o pipefail
           python tools/inventory.py --require-upstream --runner "$LYDITE_RUNNER" \
              --evidence "$RUNNER_TEMP/lydite-cases/examples.json" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Retain pre-execution lane failure
+        if: failure() && !cancelled()
+        shell: bash
+        env:
+          LYDITE_RUNNER: ${{ matrix.runner }}
+          LYDITE_EARLY_STAGE: ${{ steps.run-cases.outcome == 'skipped' && 'setup' || 'inventory' }}
+        run: |
+          output="$RUNNER_TEMP/lydite-cases/examples.json"
+          if [[ -f "$output" ]]; then
+            exit 0
+          fi
+          if [[ -f tools/validation_contract.py ]] && command -v python >/dev/null; then
+            python tools/validation_contract.py "$output" "$LYDITE_RUNNER" "$LYDITE_EARLY_STAGE"
+          else
+            mkdir -p "$(dirname "$output")"
+            printf '{"schema_version":1,"kind":"pre-execution-failure","outcome":"BLOCKED","failed_stage":"%s","expected_checkout_sha":"%s","run_id":"%s","attempt":"%s","runner":"%s","cases":[]}\n' \
+              "$LYDITE_EARLY_STAGE" "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$LYDITE_RUNNER" > "$output"
+          fi
       - name: Upload per-case evidence
-        if: always()
+        if: always() && !cancelled()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: lydite-cases-${{ matrix.runner }}-attempt-${{ github.run_attempt }}
