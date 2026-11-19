@@ -12,3 +12,8 @@ class MarkdownNavigationTests(unittest.TestCase):
                 "\n[install]: /docs/guide.md\n"
                 "\n<a href=\"another.md\">Another</a>\n")
         self.assertEqual(self.targets(text), [(1, "/docs/guide.md"), (1, "a.md"), (5, "another.md")])
+
+    def test_empty_alt_images_and_inline_code(self):
+        self.assertEqual(self.targets(chr(96) + "[Example](missing.md)" + chr(96)
+                                      + " ![](decoration.png) [Real](guide.md)\n"),
+                         [(1, "decoration.png"), (1, "guide.md")])
