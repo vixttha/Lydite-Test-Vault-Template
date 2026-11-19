@@ -239,6 +239,15 @@ class NativeOutcomeTests(unittest.TestCase):
                 with self.subTest(name=name):
                     self.assertEqual(execute_case({**case, "native_test": name}, directory, os.environ)[0], expected)
 
+    def test_unittest_wrapper_preserves_isolated_imports(self):
+        with TemporaryDirectory() as directory, redirect_stdout(io.StringIO()):
+            test = Path(directory) / "isolated_fixture.py"
+            test.write_text("import unittest\nclass TestCase(unittest.TestCase):\n    def test_one(self): pass\n")
+            case = {"native_runner": "unittest", "test": test.name, "native_test": "TestCase.test_one"}
+            for argv, expected in ((["-I"], "FAIL"), ([], "PASS")):
+                command = [sys.executable, *argv, "-m", "unittest", "isolated_fixture"]
+                self.assertEqual(execute_case({**case, "commands": [command]}, directory, os.environ)[0], expected)
+
     def test_unittest_records_passes_alongside_setup_and_subtest_skips(self):
         with TemporaryDirectory() as directory:
             test = Path(directory) / "test_fixture.py"

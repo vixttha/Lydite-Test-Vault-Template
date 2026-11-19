@@ -168,7 +168,8 @@ class EvidenceResult(unittest.TextTestResult):
 
 
 if __name__ == "__main__":
-    sys.path[0] = os.getcwd()
+    if not sys.flags.safe_path:
+        sys.path[0] = os.getcwd()
     program = unittest.main(
         module=None, testRunner=unittest.TextTestRunner(resultclass=EvidenceResult), exit=False,
     )
