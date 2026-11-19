@@ -3,6 +3,7 @@
   "language": "Java",
   "runtime": "Java 21 / source-file launcher",
   "runner": "ubuntu-24.04",
+  "runtime_probe": ["java", "-version"],
   "cases": [
     {
       "id": "JAVA-001",
