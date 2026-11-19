@@ -19,7 +19,8 @@ def go_events(output):
 
 
 TAP_RESULT = re.compile(r"^( *)(ok|not ok) [0-9]+(?: - (.*))?$")
-TAP_DIRECTIVE = re.compile(r"(?<!\\)\s+#\s*(skip|todo)(?:\s|$)", re.I)
+TAP_DIRECTIVE = re.compile(r"\s+#\s*(skip|todo)(?:\s|$)", re.I)
+TAP_NAME_ESCAPE = re.compile(r"\\([\\#])")
 
 
 def node_leaf_results(output):
@@ -40,7 +41,7 @@ def node_leaf_results(output):
         name = (title or "").strip()
         if directive:
             name = (title or "")[:directive.start()].strip()
-        yield name, directive[1].lower() if directive else status
+        yield TAP_NAME_ESCAPE.sub(r"\1", name), directive[1].lower() if directive else status
 
 
 def node_leaf_outcomes(output):

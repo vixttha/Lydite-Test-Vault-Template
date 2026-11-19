@@ -173,6 +173,31 @@ class NativeOutcomeTests(unittest.TestCase):
                             "commands": [["node", "--test", "--test-reporter=tap", str(test)]]}
                     self.assertEqual(execute_case(case, directory, os.environ)[0], wanted)
 
+    @unittest.skipUnless(shutil.which("node"), "Node is needed for TAP regression checks")
+    def test_named_node_tests_decode_tap_escapes_without_hiding_directives(self):
+        with TemporaryDirectory() as directory:
+            test = Path(directory) / "fixture.test.mjs"
+            for name, options, outcome in (
+                ("fixes issue #42", "{}", "PASS"),
+                ("includes # SKIP in the title", "{}", "PASS"),
+                ("path uses \\ and #", "{}", "PASS"),
+                ("skips a path ending in \\", "{skip: true}", "SKIP"),
+                ("todo #42", "{todo: true}", "FAIL"),
+            ):
+                with self.subTest(name=name), redirect_stdout(io.StringIO()):
+                    test.write_text(
+                        "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\n"
+                        f"test({json.dumps(name)}, {options}, () => assert.equal(2 + 2, 4));\n"
+                        "test('unrelated', () => assert.equal(3 + 4, 7));\n",
+                        encoding="utf-8",
+                    )
+                    case = {"native_runner": "node-tap", "native_test": name, "test": test.name,
+                            "commands": [["node", "--test", "--test-reporter=tap", str(test)]]}
+                    self.assertEqual(execute_case(case, directory, os.environ)[0], outcome)
+                    self.assertEqual(
+                        execute_case({**case, "native_test": "missing"}, directory, os.environ)[0], "FAIL"
+                    )
+
     def test_unittest_records_passes_alongside_setup_and_subtest_skips(self):
         with TemporaryDirectory() as directory:
             test = Path(directory) / "test_fixture.py"
