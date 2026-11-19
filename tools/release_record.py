@@ -11,6 +11,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from archive_manifest import load_manifest
+from supporting_payloads import sha256, verify_support_payloads
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -78,8 +79,26 @@ def fetch_support(repository, run_id, attempt, run_url):
             time.sleep(2)
 
 
+def git_bytes(*args):
+    return subprocess.check_output(["git", "-C", str(ROOT), *args])
+
+
 def git(*args):
-    return subprocess.check_output(["git", "-C", str(ROOT), *args], text=True).strip()
+    return git_bytes(*args).decode("utf-8").strip()
+
+
+def graphify_contract(checkout, manifest):
+    archives = {}
+    for tag, source in manifest["versions"].items():
+        receipt = json.loads(git("show", f"{checkout}:Graphify HQ/{tag}/receipt.json"))
+        if receipt["source_commit"] != source["source_commit"]:
+            raise ValueError(f"{tag}: committed Graphify receipt differs from the archive pin")
+        archives[tag] = {key: receipt[key] for key in ("source_commit", "graph_sha256", "nodes", "edges")} | {"mcp": "PASS"}
+    return {
+        "kind": "graphify-verification",
+        "requirements_sha256": sha256(git_bytes("show", f"{checkout}:tools/graphify/requirements.txt")),
+        "archives": archives,
+    }
 
 
 def receipt_context(event, version="", pr_head=None, pr_base=None):
@@ -229,6 +248,8 @@ def main():
     attempt = int(os.environ["GITHUB_RUN_ATTEMPT"])
     try:
         evidence = fetch_support(repository, run_id, attempt, run_url)
+        scope = {"schema_version": 1, "checkout_sha": checkout, "run_id": run_id, "attempt": str(attempt)}
+        verify_support_payloads(repository, evidence, scope, graphify_contract(checkout, manifest))
     except (ValueError, subprocess.CalledProcessError) as error:
         raise SystemExit(f"Validation evidence unavailable: {error}") from error
     if version is not None:
@@ -248,6 +269,7 @@ def main():
         "run_url": run_url,
         "completed_jobs": ["inventory-and-adoption", "examples (Ubuntu and Windows)", "graphify"],
         "supporting_evidence": evidence,
+        "supporting_payloads_verified": True,
         "supporting_artifacts_expire_at": min(
             item["artifact"]["expires_at"] for item in evidence if "artifact" in item
         ),

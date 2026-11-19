@@ -663,6 +663,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
                     '{"schema_version":1,"current":"v0.0.3","versions":{"v0.0.3":{}}}' if args[0] == "show" else checkout
                 )) as source, \
                 patch("release_record.fetch_support", return_value=support) as fetch, \
+                patch("release_record.graphify_contract"), patch("release_record.verify_support_payloads"), \
                 patch("release_record.verify_candidate_target") as verify, redirect_stdout(io.StringIO()):
             with patch.object(sys, "argv", ["release_record.py", "--check-target"]):
                 record_release()

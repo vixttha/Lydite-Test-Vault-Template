@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from validation_contract import ADOPTION_OUTCOMES
 from verify_adoption import ROOT, STARTER, run
 
 
@@ -48,8 +49,9 @@ def verify(output, work):
     start, end = native.index("def debit("), native.index("class DebitContract")
     test.write_text(native[:start] + "from app import debit\n\n\n" + native[end:], encoding="utf-8")
 
-    def check(name, sha, expected, exit_code):
+    def check(name, sha, exit_code):
         path = report_dir / f"adoption-{name}.json"
+        expected = ADOPTION_OUTCOMES[path.name]
         run([*inventory, "--run", "python", "--evidence", str(path)], project, result=exit_code, env=env)
         report = json.loads(path.read_text(encoding="utf-8"))
         outcomes = {case["case_id"]: case["outcome"] for case in report["cases"]}
@@ -59,7 +61,7 @@ def verify(output, work):
             raise AssertionError(f"{name}: runtime reporting is missing")
 
     checkout = commit(project, "Exercise the consumer implementation")
-    check("pass", checkout, {"PYTHON-001": "PASS"}, 0)
+    check("pass", checkout, 0)
     if os.name != "nt":
         tools = work / "python3-only"
         tools.mkdir()
@@ -69,7 +71,7 @@ def verify(output, work):
             (tools / "git").symlink_to(git)
         run(["python3", "tools/inventory.py", "--run", "python"], project, includes="PYTHON-001 | PASS",
             env={**env, "PATH": str(tools)})
-    check("pass", checkout, {"PYTHON-001": "PASS"}, 0)
+    check("pass", checkout, 0)
 
     original_app = app.read_text(encoding="utf-8")
     run(inventory, project, includes="1 declared cases", env=env)
@@ -89,8 +91,7 @@ def verify(output, work):
          "support": [], "commands": [["python", "tests/independent.py"]]},
     ])
     metadata.write_text(json.dumps(manifest), encoding="utf-8")
-    check("fail", commit(project, "Exercise a controlled regression and missing prerequisite"),
-          {"PYTHON-001": "FAIL", "PYTHON-002": "BLOCKED", "PYTHON-003": "PASS"}, 1)
+    check("fail", commit(project, "Exercise a controlled regression and missing prerequisite"), 1)
 
     independent.unlink()
     manifest["cases"] = manifest["cases"][:1]
@@ -102,10 +103,16 @@ def verify(output, work):
         ),
         encoding="utf-8",
     )
-    check("skip", commit(project, "Exercise a native all-skipped suite"), {"PYTHON-001": "SKIP"}, 1)
+    check("skip", commit(project, "Exercise a native all-skipped suite"), 1)
 
     test.write_text("import unittest\n", encoding="utf-8")
-    check("empty", commit(project, "Exercise zero native tests"), {"PYTHON-001": "FAIL"}, 1)
+    check("empty", commit(project, "Exercise zero native tests"), 1)
+    index = {
+        "schema_version": 1, "kind": "adoption-verification",
+        "checkout_sha": run(["git", "rev-parse", "HEAD"], ROOT),
+        "run_id": os.environ.get("GITHUB_RUN_ID"), "attempt": os.environ.get("GITHUB_RUN_ATTEMPT"),
+    }
+    (report_dir / "adoption-index.json").write_text(json.dumps(index, indent=2) + "\n", encoding="utf-8")
     print("Complete install verified across passing, failing, blocked, all-skipped, and zero-test outcomes.")
 
 

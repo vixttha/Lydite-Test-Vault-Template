@@ -17,6 +17,14 @@ REQUIRED_LANES = {
 }
 
 
+ADOPTION_OUTCOMES = {
+    "adoption-pass.json": {"PYTHON-001": "PASS"},
+    "adoption-fail.json": {"PYTHON-001": "FAIL", "PYTHON-002": "BLOCKED", "PYTHON-003": "PASS"},
+    "adoption-skip.json": {"PYTHON-001": "SKIP"},
+    "adoption-empty.json": {"PYTHON-001": "FAIL"},
+}
+
+
 def validate_inventory(inventory):
     observed = {runner: {} for runner in REQUIRED_LANES}
     for language, data in inventory.items():
