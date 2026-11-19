@@ -29,6 +29,8 @@ Add `--evidence path/to/report.json` to write one record per selected case. Choo
 
 Every manifest case binds its outcome to its primary `test` file. Native runners require `native_test` with the expected native name. Python `unittest` uses a qualified class and method name and verifies the reported method's source file. Node and Go run the declared file explicitly. Rust verifies the compiler input and the resulting case-local binary. A suite-wide pass cannot replace a missing named result.
 
+A normal workflow run publishes `lydite-validation-attempt-*` with the event, checkout, pull request revisions when applicable, and supporting evidence from the same attempt. For a named candidate, manually run **Lydite validation** on the intended ref and enter `release_version` in `vMAJOR.MINOR.PATCH` form. The resulting candidate receipt names the version and records the pending owner decision. The workflow only writes evidence.
+
 For a standalone assertion, point a supported interpreter directly at the primary file, or build the declared C++ or C# source and immediately run the resulting case-local artifact. C# projects explicitly include the primary source. Set the optional zero-based `assertion_command_index` to identify an assertion stage before post-processing. See the language manifests for supported invocation shapes.
 
 For a case with a `native_runner`, the final command supplies the native verdict by default. Set the optional zero-based `native_command_index` when build, test and post-processing commands appear in the same case and the test command is earlier. Every command must still complete successfully.

@@ -5,6 +5,11 @@ on:
     branches: [main, hardening/v0.0.3]
   pull_request:
   workflow_dispatch:
+    inputs:
+      release_version:
+        description: Optional version for a named release candidate
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -178,8 +183,8 @@ jobs:
           fi
           grep -F "Changed: Graphify HQ/v0.0.3/graph.json" "$log"
 
-  release-candidate:
-    name: Record candidate source and validation
+  validation-receipt:
+    name: Record checkout and validation evidence
     if: github.event.repository.private == false
     needs: [inventory-and-adoption, examples, graphify]
     permissions:
@@ -194,15 +199,17 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: '3.12'
-      - name: Record the validated candidate
+      - name: Record the validated checkout
         env:
           CANDIDATE_PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          CANDIDATE_PR_BASE: ${{ github.event.pull_request.base.sha }}
+          LYDITE_RELEASE_VERSION: ${{ inputs.release_version }}
           GH_TOKEN: ${{ github.token }}
-        run: python tools/release_record.py "${{ runner.temp }}/lydite-release/candidate.json"
-      - name: Upload candidate receipt
+        run: python tools/release_record.py "${{ runner.temp }}/lydite-receipt/receipt.json"
+      - name: Upload validation receipt
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: lydite-release-candidate-attempt-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/lydite-release/
+          name: lydite-${{ github.event_name == 'workflow_dispatch' && inputs.release_version != '' && 'release-candidate' || 'validation' }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/lydite-receipt/
           if-no-files-found: error
           retention-days: 30

@@ -12,7 +12,7 @@ from tempfile import TemporaryDirectory
 
 from inventory import checkout_identity, execute_case, print_inventory, read_inventory, report_destination, run_cases, runtime_version
 from native_outcomes import passed_tests
-from release_record import SUPPORTING_JOBS, supporting_evidence
+from release_record import SUPPORTING_JOBS, receipt_context, supporting_evidence
 
 
 class InventoryTests(unittest.TestCase):
@@ -398,6 +398,23 @@ class CheckoutIdentityTests(unittest.TestCase):
 
 
 class ReleaseEvidenceTests(unittest.TestCase):
+    def test_routine_validation_has_no_release_identity(self):
+        self.assertEqual(receipt_context("pull_request", pr_head="head", pr_base="base"), {
+            "kind": "validation", "event": "pull_request",
+            "pull_request_head": "head", "pull_request_base": "base",
+        })
+        self.assertEqual(receipt_context("workflow_dispatch")["kind"], "validation")
+        with self.assertRaisesRegex(ValueError, "explicit workflow dispatch"):
+            receipt_context("pull_request", "v1.2.3")
+
+    def test_explicit_dispatch_binds_a_valid_release_target(self):
+        context = receipt_context("workflow_dispatch", "v1.2.3")
+        self.assertEqual(context["kind"], "release_candidate")
+        self.assertEqual(context["target"], "v1.2.3")
+        self.assertEqual(context["publication_state"], "awaiting-owner-approval")
+        with self.assertRaisesRegex(ValueError, "vMAJOR.MINOR.PATCH"):
+            receipt_context("workflow_dispatch", "main")
+
     def test_receipt_requires_a_complete_same_attempt_evidence_set(self):
         attempt, run_id = 2, 123
         jobs = [{"name": name, "id": index, "run_id": run_id, "run_attempt": attempt, "conclusion": "success"}

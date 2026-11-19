@@ -1,8 +1,9 @@
-"""Record release candidate identity after the public validation matrix completes."""
+"""Record the checkout and evidence after the public validation matrix completes."""
 
 import argparse
 import json
 import os
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -67,13 +68,39 @@ def git(*args):
     return subprocess.check_output(["git", "-C", str(ROOT), *args], text=True).strip()
 
 
+def receipt_context(event, version="", pr_head=None, pr_base=None):
+    if not event:
+        raise ValueError("workflow event is required")
+    context = {
+        "kind": "validation",
+        "event": event,
+        "pull_request_head": pr_head or None,
+        "pull_request_base": pr_base or None,
+    }
+    if version:
+        if event != "workflow_dispatch":
+            raise ValueError("a named release candidate requires an explicit workflow dispatch")
+        part = r"(?:0|[1-9][0-9]*)"
+        if not re.fullmatch(rf"v{part}\.{part}\.{part}", version):
+            raise ValueError("release version must use vMAJOR.MINOR.PATCH")
+        context.update(kind="release_candidate", target=version, publication_state="awaiting-owner-approval")
+    return context
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path)
     args = parser.parse_args()
+    try:
+        context = receipt_context(
+            os.environ.get("GITHUB_EVENT_NAME"), os.environ.get("LYDITE_RELEASE_VERSION", ""),
+            os.environ.get("CANDIDATE_PR_HEAD"), os.environ.get("CANDIDATE_PR_BASE"),
+        )
+    except ValueError as error:
+        parser.error(str(error))
     checkout = git("rev-parse", "HEAD")
     if checkout != os.environ["GITHUB_SHA"]:
-        raise SystemExit("release candidate checkout differs from the workflow revision")
+        raise SystemExit("validation checkout differs from the workflow revision")
     manifest = json.loads((ROOT / "versions/manifest.json").read_text(encoding="utf-8"))
     repository, run_id = os.environ["GITHUB_REPOSITORY"], os.environ["GITHUB_RUN_ID"]
     run_url = f"{os.environ['GITHUB_SERVER_URL']}/{repository}/actions/runs/{run_id}"
@@ -81,14 +108,12 @@ def main():
     try:
         evidence = fetch_support(repository, run_id, attempt, run_url)
     except (ValueError, subprocess.CalledProcessError) as error:
-        raise SystemExit(f"Release-candidate evidence unavailable: {error}") from error
+        raise SystemExit(f"Validation evidence unavailable: {error}") from error
     record = {
         "schema_version": 1,
-        "target": "v0.0.4",
-        "publication_state": "awaiting-owner-approval",
+        **context,
         "checkout_sha": checkout,
         "tree_sha": git("rev-parse", "HEAD^{tree}"),
-        "pull_request_head": os.environ.get("CANDIDATE_PR_HEAD") or None,
         "archive_current": manifest["current"],
         "archive_sources": manifest["versions"],
         "run_id": run_id,
@@ -102,7 +127,8 @@ def main():
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
-    print(f"Draft v0.0.4 release record written for {checkout}.")
+    scope = f"Release candidate {context['target']}" if "target" in context else "Validation receipt"
+    print(f"{scope} written for {checkout}.")
 
 
 if __name__ == "__main__":
