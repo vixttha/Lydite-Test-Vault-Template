@@ -127,3 +127,43 @@ jobs:
           path: ${{ runner.temp }}/lydite-cases/
           if-no-files-found: error
           retention-days: 7
+
+  graphify:
+    name: Rebuild and verify archived Graphify maps
+    if: github.event.repository.private == false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      PYTHONHASHSEED: '0'
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+      - name: Install locked Graphify and MCP packages
+        run: >-
+          python -m pip install --no-cache-dir --only-binary=:all: --no-deps
+          -r tools/graphify/requirements.txt
+      - name: Resolve upstream pins and verify archived maps
+        shell: bash
+        run: |
+          python tools/graphify/version_maps.py "$RUNNER_TEMP/lydite-maps" --fetch-upstream --check |
+            tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Verify changed archive or graph bytes fail
+        shell: bash
+        run: |
+          archive=versions/v0.0.3/test-vault/README.md
+          map="Graphify HQ/v0.0.3/graph.json"
+          trap 'git restore -- "$archive" "$map"' EXIT
+          printf '\nSynthetic archive drift\n' >> "$archive"
+          if python tools/graphify/version_maps.py "$RUNNER_TEMP/lydite-bad-archive" --check; then
+            exit 1
+          fi
+          git restore -- "$archive"
+          printf '\n' >> "$map"
+          if python tools/graphify/version_maps.py "$RUNNER_TEMP/lydite-bad-map" --check; then
+            exit 1
+          fi

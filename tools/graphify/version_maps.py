@@ -23,6 +23,7 @@ from mcp.client.stdio import stdio_client
 ROOT = Path(__file__).resolve().parents[2]
 ARCHIVE = ROOT / "versions"
 MAPS = ROOT / "Graphify HQ"
+UPSTREAM = "https://github.com/vixttha/AlderVale-Pact-of-Ten.git"
 VERSION = re.compile(r"v[0-9]+\.[0-9]+\.[0-9]+")
 HEADING = re.compile(r"^ {0,3}(#{1,6})\s+(.+?)\s*#*\s*$")
 FENCE = re.compile(r"^ {0,3}(\x60{3,}|~{3,})")
@@ -31,6 +32,18 @@ LINK = re.compile(r"\[[^\]\n]+\]\(([^()\s]+)(?:\s+[^()]*)?\)")
 
 def git(*args):
     return subprocess.check_output(["git", "-C", str(ROOT), *args])
+
+
+def fetch_source(commit):
+    if not re.fullmatch(r"[0-9a-f]{40}", commit):
+        raise ValueError("expected a full pinned upstream commit")
+    query = subprocess.run(
+        ["git", "-C", str(ROOT), "cat-file", "-e", f"{commit}^{{commit}}"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
+    )
+    if query.returncode:
+        git("fetch", "--no-tags", "--depth=1", UPSTREAM, commit)
+        git("cat-file", "-e", f"{commit}^{{commit}}")
 
 
 def read_archive(tag, record):
@@ -193,6 +206,7 @@ def main():
     parser.add_argument("output", type=Path)
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--export-missing", action="store_true", help="Emit missing map files and an updated index in CI logs")
+    parser.add_argument("--fetch-upstream", action="store_true", help="fetch the pinned public AlderVale commits")
     args = parser.parse_args()
     output = args.output.resolve()
     if output == MAPS or output.is_relative_to(MAPS) or (output.exists() and (not output.is_dir() or any(output.iterdir()))):
@@ -206,6 +220,8 @@ def main():
     sorted_versions = sorted(versions, key=lambda tag: tuple(map(int, tag[1:].split("."))), reverse=True)
     for tag in sorted_versions:
         record = versions[tag]
+        if args.fetch_upstream:
+            fetch_source(record["source_commit"])
         sources = read_archive(tag, record)
         receipt = build_map(tag, record, sources, output / tag)
         asyncio.run(verify(output / tag, receipt))
