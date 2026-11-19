@@ -34,6 +34,10 @@ class ArchiveTests(unittest.TestCase):
         self.assertEqual(list(markdown_sections("Install\n=======\n\nNext\n----\n")),
                          [(1, 1, "Install"), (4, 2, "Next")])
 
+    def test_archived_headings_preserve_hashes_and_ignore_comments(self):
+        self.assertEqual(list(markdown_sections("# C#\n\n<!--\n# Hidden\n-->\n\n## Setup ##\n")),
+                         [(1, 1, "C#"), (7, 2, "Setup")])
+
     def test_binary_and_latin1_sources_keep_pinned_bytes(self):
         with TemporaryDirectory() as directory:
             root = Path(directory) / "source-repo"
