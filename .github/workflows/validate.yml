@@ -38,7 +38,17 @@ jobs:
         env:
           LYDITE_RELEASE_VERSION: ${{ inputs.release_version }}
           GH_TOKEN: ${{ github.token }}
-        run: python tools/release_record.py --check-target
+        run: >-
+          python tools/release_record.py --check-target
+          --preflight-record "${{ runner.temp }}/lydite-preflight/verdict.json"
+      - name: Upload named preflight verdict
+        if: always() && !cancelled()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: lydite-preflight-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/lydite-preflight/verdict.json
+          if-no-files-found: ignore
+          retention-days: 30
 
   inventory-and-adoption:
     name: Inventory and starter adoption

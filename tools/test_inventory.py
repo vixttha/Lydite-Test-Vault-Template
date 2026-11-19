@@ -16,8 +16,8 @@ from inventory import check_windows_paths, checkout_identity, execute_case, prin
 from native_outcomes import passed_tests
 from validation_contract import lane_failure, validate_inventory
 from release_record import (
-    SUPPORTING_JOBS, github_resource, main as record_release, receipt_context,
-    supporting_evidence, verify_candidate_target,
+    CandidateRejected, SUPPORTING_JOBS, github_resource, main as record_release, receipt_context,
+    run_preflight, supporting_evidence, verify_candidate_target,
 )
 
 
@@ -680,6 +680,25 @@ class ReleaseEvidenceTests(unittest.TestCase):
             self.assertEqual(record["target"], "v1.2.3")
             self.assertEqual(record["archive_current"], "v0.0.3")
             source.assert_any_call("show", f"{checkout}:versions/manifest.json")
+
+    def test_preflight_records_distinct_rejections_without_candidate_receipt(self):
+        with TemporaryDirectory() as directory, patch.dict(os.environ, {
+            "GITHUB_EVENT_NAME": "workflow_dispatch", "LYDITE_RELEASE_VERSION": "v1.2.3",
+            "GITHUB_SHA": "a" * 40, "GITHUB_RUN_ID": "42", "GITHUB_RUN_ATTEMPT": "2",
+        }, clear=True):
+            target = Path(directory) / "preflight.json"
+            for failure, reason in ((CandidateRejected("published", "already published"), "published"),
+                                    (CandidateRejected("tag_conflict", "different commit"), "tag_conflict"),
+                                    (ValueError("GitHub unavailable"), "unavailable")):
+                with patch("release_record.verify_candidate_target", side_effect=failure):
+                    with self.assertRaises(SystemExit):
+                        run_preflight("example/vault", "a" * 40, target)
+                result = json.loads(target.read_bytes())
+                self.assertEqual((result["kind"], result["outcome"], result["reason"], result["attempt"]),
+                                 ("named-candidate-preflight", "REJECTED", reason, "2"))
+            with patch.dict(os.environ, {"LYDITE_RELEASE_VERSION": "invalid"}):
+                with self.assertRaisesRegex(SystemExit, "invalid_target"):
+                    run_preflight("example/vault", "a" * 40, target)
 
     def test_routine_validation_has_no_release_identity(self):
         self.assertEqual(receipt_context("pull_request", pr_head="head", pr_base="base"), {

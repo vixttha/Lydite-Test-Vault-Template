@@ -111,11 +111,20 @@ def github_resource(endpoint, *, allow_missing=False):
     return value
 
 
+class CandidateRejected(ValueError):
+    def __init__(self, code, detail):
+        super().__init__(detail)
+        self.code = code
+
+
 def verify_candidate_target(repository, version, checkout):
     prefix = f"repos/{repository}"
     release = github_resource(f"{prefix}/releases/tags/{version}", allow_missing=True)
-    if release is not None and (release.get("tag_name") != version or release.get("draft") is not True):
-        raise ValueError(f"{version} is already published or its release state could not be verified.")
+    if release is not None:
+        if release.get("tag_name") != version or type(release.get("draft")) is not bool:
+            raise CandidateRejected("unavailable", f"GitHub returned an invalid release for {version}.")
+        if not release["draft"]:
+            raise CandidateRejected("published", f"{version} is already published.")
     ref = github_resource(f"{prefix}/git/ref/tags/{version}", allow_missing=True)
     if ref is None:
         # Confirm the repository and checkout are visible before relying on missing-object responses.
@@ -133,7 +142,7 @@ def verify_candidate_target(repository, version, checkout):
             break
         if target.get("type") == "commit":
             if sha != checkout:
-                raise ValueError(f"Tag {version} points to {sha}, not the validated checkout {checkout}.")
+                raise CandidateRejected("tag_conflict", f"Tag {version} points to {sha}, not the validated checkout {checkout}.")
             return
         if target.get("type") != "tag":
             break
@@ -142,13 +151,58 @@ def verify_candidate_target(repository, version, checkout):
     raise ValueError(f"Could not resolve tag {version} to a Git commit.")
 
 
+def run_preflight(repository, checkout, output):
+    version = None
+    error = None
+    try:
+        context = receipt_context(os.environ.get("GITHUB_EVENT_NAME"),
+                                  os.environ.get("LYDITE_RELEASE_VERSION", ""))
+        version = context.get("target")
+        if version is None:
+            raise ValueError("--check-target requires a named release candidate")
+    except ValueError as invalid:
+        error = CandidateRejected("invalid_target", str(invalid))
+    if error is None:
+        try:
+            if checkout != os.environ.get("GITHUB_SHA"):
+                raise ValueError("validation checkout differs from the workflow revision")
+            verify_candidate_target(repository, version, checkout)
+        except ValueError as rejected:
+            error = rejected
+    verdict = {
+        "schema_version": 1, "kind": "named-candidate-preflight",
+        "checkout_sha": checkout, "target": version,
+        "run_id": os.environ.get("GITHUB_RUN_ID"), "attempt": os.environ.get("GITHUB_RUN_ATTEMPT"),
+        "outcome": "REJECTED" if error else "AVAILABLE",
+        "reason": getattr(error, "code", "unavailable") if error else None,
+    }
+    if output:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json.dumps(verdict, indent=2) + "\n", encoding="utf-8")
+    if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
+        with Path(summary).open("a", encoding="utf-8") as stream:
+            stream.write(f"Named candidate preflight: **{verdict['outcome']}**"
+                         f" · {version or 'invalid target'} · {verdict['reason'] or 'available'}\n")
+    if error:
+        raise SystemExit(f"Release candidate rejected [{verdict['reason']}]: {error}")
+    print(f"Release target {version} is available for checkout {checkout}.")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", type=Path, nargs="?")
     parser.add_argument("--check-target", action="store_true", help="check a named target before running tests")
+    parser.add_argument("--preflight-record", type=Path, help="write a named candidate preflight verdict")
     args = parser.parse_args()
+    if args.preflight_record and not args.check_target:
+        parser.error("--preflight-record requires --check-target")
     if args.check_target == (args.output is not None):
         parser.error("supply an output path or --check-target")
+    checkout = git("rev-parse", "HEAD")
+    repository = os.environ["GITHUB_REPOSITORY"]
+    if args.check_target:
+        run_preflight(repository, checkout, args.preflight_record)
+        return
     try:
         context = receipt_context(
             os.environ.get("GITHUB_EVENT_NAME"), os.environ.get("LYDITE_RELEASE_VERSION", ""),
@@ -156,20 +210,9 @@ def main():
         )
     except ValueError as error:
         parser.error(str(error))
-    checkout = git("rev-parse", "HEAD")
     if checkout != os.environ["GITHUB_SHA"]:
         raise SystemExit("validation checkout differs from the workflow revision")
-    repository = os.environ["GITHUB_REPOSITORY"]
     version = context.get("target")
-    if args.check_target:
-        if version is None:
-            parser.error("--check-target requires a named release candidate")
-        try:
-            verify_candidate_target(repository, version, checkout)
-        except ValueError as error:
-            raise SystemExit(f"Release candidate rejected: {error}") from error
-        print(f"Release target {version} is available for checkout {checkout}.")
-        return
     manifest = load_manifest(git("show", f"{checkout}:versions/manifest.json"))
     run_id = os.environ["GITHUB_RUN_ID"]
     run_url = f"{os.environ['GITHUB_SERVER_URL']}/{repository}/actions/runs/{run_id}"
