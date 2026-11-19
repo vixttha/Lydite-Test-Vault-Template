@@ -55,7 +55,7 @@ jobs:
           name: lydite-adoption-attempt-${{ github.run_attempt }}
           path: ${{ runner.temp }}/lydite-adoption/
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 30
 
   examples:
     name: Language examples (${{ matrix.runner }})
@@ -127,7 +127,7 @@ jobs:
           name: lydite-cases-${{ matrix.runner }}-attempt-${{ github.run_attempt }}
           path: ${{ runner.temp }}/lydite-cases/
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 30
 
   graphify:
     name: Rebuild and verify archived Graphify maps
@@ -182,6 +182,9 @@ jobs:
     name: Record candidate source and validation
     if: github.event.repository.private == false
     needs: [inventory-and-adoption, examples, graphify]
+    permissions:
+      actions: read
+      contents: read
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -194,6 +197,7 @@ jobs:
       - name: Record the validated candidate
         env:
           CANDIDATE_PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          GH_TOKEN: ${{ github.token }}
         run: python tools/release_record.py "${{ runner.temp }}/lydite-release/candidate.json"
       - name: Upload candidate receipt
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

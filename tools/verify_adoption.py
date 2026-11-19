@@ -124,6 +124,20 @@ def copy_and_check(sample, target):
     run(command, target, includes="1 unique cases across 1 topics")
     case_path.write_text("".join("    " + line for line in (HEADER, DIVIDER, row)), encoding="utf-8")
     run(command, target, result=1, includes="no cases found")
+    hidden_row = "| HIDDEN-001 | Hidden example | P0 | Fixture | Omit from case index |\n"
+    commented = "<!-- example only\n" + HEADER + DIVIDER + hidden_row + "-->\n"
+    case_path.write_text(commented, encoding="utf-8")
+    run(command, target, result=1, includes="no cases found")
+    for mixed in (commented + catalog, catalog + commented):
+        case_path.write_text(mixed, encoding="utf-8")
+        run([*command, "--topics", str(topics_path)], target, includes="1 unique cases across 1 topics")
+    hidden_manifest = target / "hidden-case.json"
+    hidden_manifest.write_text(
+        '{"schema_version":1,"case_id":"HIDDEN-001","required_checks":["fixture"],"shared_evidence":false}',
+        encoding="utf-8",
+    )
+    run([sys.executable, "test-vault/verify_receipts.py", "--case", str(hidden_manifest),
+         "--receipts", "receipts"], target, result=1, includes="case ID must be registered")
     case_path.write_text(catalog, encoding="utf-8")
     run(workflow_step, target, env=env, includes="Catalog result: PASS")
     case_path.write_text(catalog + "  " + row.replace("| P0 |", "| P9 |"), encoding="utf-8")

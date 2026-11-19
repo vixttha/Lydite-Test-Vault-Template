@@ -31,7 +31,11 @@ def read_cases(path):
     in_table = False
     pending_divider = None
     fence = None
+    comment = False
     for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if comment:
+            comment = "-->" not in raw
+            continue
         marker = FENCE.match(raw)
         if fence:
             if marker and marker[1][0] == fence[0] and len(marker[1]) >= len(fence) and not marker[2].strip():
@@ -40,7 +44,8 @@ def read_cases(path):
 
         indented_code = raw.expandtabs(4).startswith("    ")
         line = raw.strip()
-        cells = table_cells(line) if not marker and not indented_code and "|" in line else []
+        starts_comment = not indented_code and line.startswith("<!--")
+        cells = table_cells(line) if not (marker or indented_code or starts_comment) and "|" in line else []
         if pending_divider is not None:
             if len(cells) != len(HEADER) or not all(SEPARATOR.fullmatch(cell) for cell in cells):
                 raise ValueError(f"{path}:{pending_divider}: expected a Markdown table divider after the header")
@@ -50,6 +55,8 @@ def read_cases(path):
 
         if marker:
             fence = marker[1]
+        if starts_comment:
+            comment = "-->" not in line
         if not cells:
             in_table = False
             continue

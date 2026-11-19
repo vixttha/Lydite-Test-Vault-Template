@@ -7,9 +7,9 @@ import platform
 import re
 import subprocess
 from pathlib import Path, PurePosixPath
-from tempfile import TemporaryDirectory
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 
-from native_outcomes import NATIVE_RUNNERS, passed_tests, skipped_tests
+from native_outcomes import NATIVE_RUNNERS, passed_tests, skipped_tests, unittest_command
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -89,7 +89,7 @@ def read_manifest(folder, seen):
         raise ValueError("cases: expected at least one declared case")
     for index, case in enumerate(cases, 1):
         label = f"case {index}"
-        required_fields(case, {"id", "purpose", "test", "support", "commands"}, {"native_runner"}, label)
+        required_fields(case, {"id", "purpose", "test", "support", "commands"}, {"native_runner", "native_command_index"}, label)
         case_id = case["id"]
         if not nonblank(case_id) or not CASE_ID.fullmatch(case_id) or case_id in seen:
             raise ValueError(f"{label}: invalid or duplicate case {case_id}")
@@ -107,6 +107,10 @@ def read_manifest(folder, seen):
             native = case["native_runner"]
             if not nonblank(native) or native not in NATIVE_RUNNERS:
                 raise ValueError(f"{case_id}: unknown native_runner {native!r}")
+        if "native_command_index" in case:
+            native_index = case["native_command_index"]
+            if "native_runner" not in case or type(native_index) is not int or not 0 <= native_index < len(commands):
+                raise ValueError(f"{case_id}: native_command_index requires a native runner and a valid zero-based command index")
         seen.add(case_id)
     check_files(folder, cases)
     return manifest
@@ -137,32 +141,54 @@ def print_inventory(inventory):
     print(f'\n{sum(len(m["cases"]) for m in inventory.values())} declared cases in {len(inventory)} language folders.')
 
 
-def execute_case(case, folder, env, *, timeout=180):
-    output = ""
+class CheckoutDrift(RuntimeError):
+    """A verified checkout changed during execution."""
+
+
+def command_status(command, folder, env, timeout):
+    try:
+        result = subprocess.run(
+            command, cwd=folder, env=env, check=False, timeout=timeout,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace",
+        )
+    except subprocess.TimeoutExpired as error:
+        if error.stdout:
+            print(error.stdout.decode(errors="replace"), end="", flush=True)
+        return "FAIL", f"{command[0]} timed out after {timeout:g}s", None, ""
+    except FileNotFoundError:
+        return "BLOCKED", f"required executable unavailable: {command[0]}", None, ""
+    except OSError as error:
+        return "BLOCKED", f"cannot start {command[0]}: {error}", None, ""
+    print(result.stdout, end="", flush=True)
+    if result.returncode:
+        return "FAIL", f"{command[0]} exited with code {result.returncode}", result.returncode, result.stdout
+    return "PASS", "command completed", result.returncode, result.stdout
+
+
+def execute_case(case, folder, env, *, timeout=180, guard=None, command_results=None):
+    native_output = ""
+    commands = case["commands"]
+    native_index = case.get("native_command_index", len(commands) - 1)
     with TemporaryDirectory(prefix="lydite-") as temp:
-        for argv in case["commands"]:
+        for index, argv in enumerate(commands):
+            if guard:
+                guard()
             command = [arg.replace("{tmp}", temp) for arg in argv]
-            try:
-                result = subprocess.run(
-                    command, cwd=folder, env=env, check=False, timeout=timeout,
-                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace",
-                )
-            except subprocess.TimeoutExpired as error:
-                if error.stdout:
-                    print(error.stdout.decode(errors="replace"), end="", flush=True)
-                return "FAIL", f"{argv[0]} timed out after {timeout:g}s"
-            except FileNotFoundError:
-                return "BLOCKED", f"required executable unavailable: {argv[0]}"
-            except OSError as error:
-                return "BLOCKED", f"cannot start {argv[0]}: {error}"
-            output = result.stdout
-            print(output, end="", flush=True)
-            if result.returncode:
-                return "FAIL", f"{argv[0]} exited with code {result.returncode}"
+            if case.get("native_runner") == "unittest" and index == native_index:
+                command = unittest_command(command)
+            status, reason, exit_code, output = command_status(command, folder, env, timeout)
+            if command_results is not None:
+                command_results[index].update(outcome=status, detail=reason, exit_code=exit_code)
+            if guard:
+                guard()
+            if status != "PASS":
+                return status, reason
+            if index == native_index:
+                native_output = output
     if native := case.get("native_runner"):
         try:
-            if not passed_tests(native, output):
-                if skipped_tests(native, output):
+            if not passed_tests(native, native_output):
+                if skipped_tests(native, native_output):
                     return "SKIP", f"{native} reported skipped tests and no passes"
                 return "FAIL", f"{native} reported no passing tests"
         except (ValueError, AttributeError):
@@ -180,7 +206,10 @@ def runtime_version(probe, folder, env):
         )
     except (OSError, subprocess.SubprocessError):
         return None
-    return (result.stdout or result.stderr).splitlines()[0] if result.stdout or result.stderr else None
+    return next(
+        (line.strip() for output in (result.stdout, result.stderr) for line in output.splitlines() if line.strip()),
+        None,
+    )
 
 
 def checkout_identity(root):
@@ -199,7 +228,43 @@ def checkout_identity(root):
     return {"state": "MODIFIED" if dirty else "CLEAN", "commit": None if dirty else base, "base_commit": base}
 
 
+def report_destination(path):
+    destination = path.resolve()
+    inputs = ((ROOT / name).resolve() for name in ("languages", "tools"))
+    if destination.is_relative_to((ROOT / ".git").resolve()) or (
+        destination.exists() and any(destination.is_relative_to(prefix) for prefix in inputs)
+    ):
+        raise ValueError("evidence destination points inside project inputs")
+    try:
+        tracked = subprocess.check_output(
+            ["git", "-C", str(ROOT), "ls-files", "-z"], stderr=subprocess.DEVNULL,
+        )
+    except FileNotFoundError:
+        tracked = b""
+    except subprocess.CalledProcessError:
+        tracked = b""
+    if any(destination == (ROOT / os.fsdecode(name)).resolve() for name in tracked.split(b"\0") if name):
+        raise ValueError("evidence destination points to a tracked project file")
+    return destination
+
+
+def write_report(path, report):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pending = None
+    try:
+        with NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent, delete=False) as stream:
+            pending = Path(stream.name)
+            json.dump(report, stream, indent=2)
+            stream.write("\n")
+        pending.replace(path)
+    finally:
+        if pending is not None:
+            pending.unlink(missing_ok=True)
+
+
 def run_cases(inventory, languages, evidence=None):
+    if evidence is not None:
+        evidence = report_destination(evidence)
     source = checkout_identity(ROOT)
     env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "DOTNET_CLI_TELEMETRY_OPTOUT": "1"}
     report = {
@@ -216,30 +281,55 @@ def run_cases(inventory, languages, evidence=None):
         },
         "cases": [],
     }
+    def guard():
+        if source["state"] == "CLEAN" and checkout_identity(ROOT) != source:
+            raise CheckoutDrift("the verified checkout changed during execution")
+
+    hosted_blocked = env.get("GITHUB_ACTIONS") == "true" and source["state"] != "CLEAN"
+    drifted = False
     print(f"Checkout {source['commit'] or source['state']} | run {report['run_id'] or 'local'}"
           f" | attempt {report['attempt'] or 'n/a'}", flush=True)
     for slug in languages:
         manifest = inventory[slug]
         folder = ROOT / "languages" / slug
-        runtime = runtime_version(manifest.get("runtime_probe"), folder, env)
+        runtime = None
+        if manifest.get("runtime_probe") and not (hosted_blocked or drifted):
+            try:
+                guard()
+                runtime = runtime_version(manifest["runtime_probe"], folder, env)
+                guard()
+            except CheckoutDrift:
+                drifted = True
         for case in manifest["cases"]:
+            command_results = [
+                {"index": index, "outcome": "NOT_RUN", "detail": "stage not reached", "exit_code": None}
+                for index in range(len(case["commands"]))
+            ]
             print(f'{case["id"]} | {case["purpose"]}', flush=True)
-            if env.get("GITHUB_ACTIONS") == "true" and source["state"] != "CLEAN":
+            if drifted:
+                status, reason = "BLOCKED", "tracked checkout changed during this run"
+            elif hosted_blocked:
                 status, reason = "BLOCKED", "hosted evidence requires a clean Git checkout at the Vault root"
             elif manifest.get("runtime_probe") and runtime is None:
                 status, reason = "BLOCKED", "declared runtime version probe failed"
             else:
-                status, reason = execute_case(case, folder, env)
+                try:
+                    status, reason = execute_case(case, folder, env, guard=guard, command_results=command_results)
+                except CheckoutDrift as error:
+                    drifted = True
+                    status, reason = "FAIL", str(error)
             print(f'{case["id"]} | {status} | {reason}', flush=True)
             report["cases"].append({
                 "case_id": case["id"], "language": slug, "test": case["test"],
                 "declared_runner": manifest["runner"], "declared_runtime": manifest["runtime"],
-                "observed_runtime": runtime, "commands": case["commands"],
+                "observed_runtime": runtime, "commands": case["commands"], "command_results": command_results,
                 "outcome": status, "detail": reason,
             })
+    if drifted:
+        report["source"] = {"state": "DRIFTED", "commit": None, "base_commit": source["base_commit"]}
+        report["checkout_sha"] = None
     if evidence is not None:
-        evidence.parent.mkdir(parents=True, exist_ok=True)
-        evidence.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+        write_report(report_destination(evidence), report)
     return 0 if all(case["outcome"] == "PASS" for case in report["cases"]) else 1
 
 
