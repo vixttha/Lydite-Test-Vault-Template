@@ -7,7 +7,7 @@ import platform
 import re
 import subprocess
 from pathlib import Path, PurePosixPath
-from tempfile import TemporaryDirectory
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 
 from native_outcomes import NATIVE_RUNNERS, passed_tests, skipped_tests, unittest_command
 
@@ -217,7 +217,43 @@ def checkout_identity(root):
     return {"state": "MODIFIED" if dirty else "CLEAN", "commit": None if dirty else base, "base_commit": base}
 
 
+def report_destination(path):
+    destination = path.resolve()
+    inputs = ((ROOT / name).resolve() for name in ("languages", "tools"))
+    if destination.is_relative_to((ROOT / ".git").resolve()) or (
+        destination.exists() and any(destination.is_relative_to(prefix) for prefix in inputs)
+    ):
+        raise ValueError("evidence destination points inside project inputs")
+    try:
+        tracked = subprocess.check_output(
+            ["git", "-C", str(ROOT), "ls-files", "-z"], stderr=subprocess.DEVNULL,
+        )
+    except FileNotFoundError:
+        tracked = b""
+    except subprocess.CalledProcessError:
+        tracked = b""
+    if any(destination == (ROOT / os.fsdecode(name)).resolve() for name in tracked.split(b"\0") if name):
+        raise ValueError("evidence destination points to a tracked project file")
+    return destination
+
+
+def write_report(path, report):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pending = None
+    try:
+        with NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent, delete=False) as stream:
+            pending = Path(stream.name)
+            json.dump(report, stream, indent=2)
+            stream.write("\n")
+        pending.replace(path)
+    finally:
+        if pending is not None:
+            pending.unlink(missing_ok=True)
+
+
 def run_cases(inventory, languages, evidence=None):
+    if evidence is not None:
+        evidence = report_destination(evidence)
     source = checkout_identity(ROOT)
     env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "DOTNET_CLI_TELEMETRY_OPTOUT": "1"}
     report = {
@@ -278,8 +314,7 @@ def run_cases(inventory, languages, evidence=None):
         report["source"] = {"state": "DRIFTED", "commit": None, "base_commit": source["base_commit"]}
         report["checkout_sha"] = None
     if evidence is not None:
-        evidence.parent.mkdir(parents=True, exist_ok=True)
-        evidence.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+        write_report(report_destination(evidence), report)
     return 0 if all(case["outcome"] == "PASS" for case in report["cases"]) else 1
 
 

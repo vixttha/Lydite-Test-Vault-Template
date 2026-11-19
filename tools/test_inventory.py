@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 from tempfile import TemporaryDirectory
 
-from inventory import checkout_identity, execute_case, print_inventory, read_inventory, run_cases
+from inventory import checkout_identity, execute_case, print_inventory, read_inventory, report_destination, run_cases
 from native_outcomes import passed_tests
 
 
@@ -256,3 +256,28 @@ class CheckoutIdentityTests(unittest.TestCase):
             self.assertEqual(report["source"]["state"], "DRIFTED")
             self.assertEqual([row["outcome"] for row in report["cases"]], ["FAIL", "BLOCKED"])
             self.assertFalse((language / "next-case-marker").exists())
+
+
+    def test_report_rejects_tracked_destinations_before_running_cases(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            tracked = root / "README.md"
+            tracked.write_text("retained", encoding="utf-8")
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            subprocess.run(["git", "-C", str(root), "add", "README.md"], check=True)
+            fixture = {"cases": [{"id": "OUTPUT-001", "purpose": "Preserve inputs", "test": "tests/sample.py",
+                                  "commands": [[sys.executable, "-c", "pass"]]}],
+                       "runtime": "Python", "runner": "ubuntu-24.04"}
+            with patch("inventory.ROOT", root), patch("inventory.execute_case") as execute:
+                with self.assertRaisesRegex(ValueError, "tracked project file"):
+                    run_cases({"fixture": fixture}, ["fixture"], tracked)
+                execute.assert_not_called()
+                alias = root / "docs-alias"
+                try:
+                    alias.symlink_to(tracked)
+                except (OSError, NotImplementedError):
+                    alias = tracked.parent / "." / tracked.name
+                with self.assertRaisesRegex(ValueError, "tracked project file"):
+                    report_destination(alias)
+                self.assertEqual(report_destination(root / "run.json"), (root / "run.json").resolve())
+            self.assertEqual(tracked.read_text(encoding="utf-8"), "retained")
