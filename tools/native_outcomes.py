@@ -10,6 +10,7 @@ from pathlib import Path
 
 
 UNITTEST_RESULT = "LYDITE_UNITTEST_RESULTS "
+UNITTEST_RESULT_FILE = "LYDITE_UNITTEST_RESULT_FILE"
 
 
 NATIVE_RUNNERS = {"go-json", "node-tap", "rust-libtest", "unittest"}
@@ -196,9 +197,13 @@ if __name__ == "__main__":
     skipped = {getattr(test, "test_case", test) for test, _ in result.skipped}
     skipped = (skipped | result.setup_skips) - result.passed
     skipped = [entry for test in skipped if (entry := unittest_identity(test))]
-    print(UNITTEST_RESULT + json.dumps({
+    record = UNITTEST_RESULT + json.dumps({
         "passed": len(result.passed), "skipped": len(result.skipped),
         "passing": sorted(passed, key=lambda entry: (entry["source"], entry["id"])),
         "skipping": sorted(skipped, key=lambda entry: (entry["source"], entry["id"])),
-    }))
+    })
+    if result_file := os.environ.get(UNITTEST_RESULT_FILE):
+        Path(result_file).write_text(record + "\n", encoding="utf-8")
+    else:
+        print(record)
     raise SystemExit(0 if result.wasSuccessful() else 1)

@@ -10,7 +10,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path, PurePosixPath
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 
-from native_outcomes import NATIVE_RUNNERS, node_command, passed_tests, selected_outcome, skipped_tests, unittest_command
+from native_outcomes import NATIVE_RUNNERS, UNITTEST_RESULT_FILE, node_command, passed_tests, selected_outcome, skipped_tests, unittest_command
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -266,18 +266,21 @@ def execute_case(case, folder, env, *, timeout=180, guard=None, command_results=
     native_output = ""
     commands = case["commands"]
     native_index = case.get("native_command_index", len(commands) - 1)
+    native_runner = case.get("native_runner")
     with TemporaryDirectory(prefix="lydite-") as temp:
-        node_result = Path(temp) / "node-result.json"
+        result_file = Path(temp) / "native-result.json"
         for index, argv in enumerate(commands):
             if guard:
                 guard()
             command = [arg.replace("{tmp}", temp) for arg in argv]
+            command_env = env
             if index == native_index:
-                if case.get("native_runner") == "unittest":
+                if native_runner == "unittest":
                     command = unittest_command(command)
-                elif case.get("native_runner") == "node-tap":
-                    command = node_command(command, node_result)
-            status, reason, exit_code, output = command_status(command, folder, env, timeout)
+                    command_env = {**env, UNITTEST_RESULT_FILE: str(result_file)}
+                elif native_runner == "node-tap":
+                    command = node_command(command, result_file)
+            status, reason, exit_code, output = command_status(command, folder, command_env, timeout)
             if command_results is not None:
                 command_results[index].update(outcome=status, detail=reason, exit_code=exit_code)
             if guard:
@@ -285,11 +288,11 @@ def execute_case(case, folder, env, *, timeout=180, guard=None, command_results=
             if status != "PASS":
                 return status, reason
             if index == native_index:
-                if case.get("native_runner") == "node-tap":
+                if native_runner in {"node-tap", "unittest"}:
                     try:
-                        native_output = node_result.read_text(encoding="utf-8")
-                    except OSError:
-                        return "FAIL", "Node did not provide a structured test result"
+                        native_output = result_file.read_text(encoding="utf-8")
+                    except (OSError, UnicodeError):
+                        return "FAIL", f"{native_runner} did not provide a structured test result"
                 else:
                     native_output = output
     if native := case.get("native_runner"):

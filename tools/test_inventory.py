@@ -321,6 +321,17 @@ class NativeOutcomeTests(unittest.TestCase):
             for name, expected in (("Tests.test_selected", "SKIP"), ("Tests.test_unselected", "FAIL")):
                 self.assertEqual(execute_case({**case, "native_test": name}, directory, os.environ)[0], expected)
 
+    def test_unittest_cleanup_output_does_not_hide_the_named_result(self):
+        with TemporaryDirectory() as directory, redirect_stdout(io.StringIO()):
+            test = Path(directory) / "fixture.py"
+            test.write_text(
+                "import atexit, unittest\natexit.register(print, 'cleanup')\n"
+                "class Tests(unittest.TestCase):\n    def test_pass(self): pass\n"
+            )
+            case = {"native_runner": "unittest", "test": test.name, "native_test": "Tests.test_pass",
+                    "commands": [[sys.executable, "-m", "unittest", "fixture"]]}
+            self.assertEqual(execute_case(case, directory, os.environ)[0], "PASS")
+
     def test_named_unittest_must_run_from_the_declared_file(self):
         with TemporaryDirectory() as directory, redirect_stdout(io.StringIO()):
             folder = Path(directory)
