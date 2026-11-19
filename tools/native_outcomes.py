@@ -161,11 +161,6 @@ class EvidenceResult(unittest.TextTestResult):
         super().addSuccess(test)
         self.passed.add(test)
 
-    def addSubTest(self, test, subtest, err):
-        super().addSubTest(test, subtest, err)
-        if err is None:
-            self.passed.add(test)
-
 
 class EvidenceRunner(unittest.TextTestRunner):
     resultclass = EvidenceResult

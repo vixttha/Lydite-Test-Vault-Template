@@ -287,11 +287,24 @@ class NativeOutcomeTests(unittest.TestCase):
                 "        with self.subTest('required'): self.assertEqual(2 + 2, 4)\n"
             )
             passing = "class Passing(unittest.TestCase):\n    def test_pass(self): self.assertTrue(True)\n"
-            for content, wanted in ((passing + setup_skip, "PASS"), (subtests, "PASS"),
+            for content, wanted in ((passing + setup_skip, "PASS"), (subtests, "SKIP"),
                                     (setup_skip, "SKIP"), ("", "FAIL")):
                 with self.subTest(wanted=wanted), redirect_stdout(io.StringIO()):
                     test.write_text(source + content, encoding="utf-8")
                     self.assertEqual(execute_case(case, directory, os.environ)[0], wanted)
+
+    def test_named_unittest_reports_skip_after_passing_subtest(self):
+        with TemporaryDirectory() as directory, redirect_stdout(io.StringIO()):
+            test = Path(directory) / "fixture.py"
+            test.write_text(
+                "import unittest\nclass Tests(unittest.TestCase):\n"
+                "    def test_mixed(self):\n"
+                "        with self.subTest('passes'): self.assertTrue(True)\n"
+                "        with self.subTest('skips'): self.skipTest('optional')\n"
+            )
+            case = {"native_runner": "unittest", "test": test.name, "native_test": "Tests.test_mixed",
+                    "commands": [[sys.executable, "-m", "unittest", "fixture"]]}
+            self.assertEqual(execute_case(case, directory, os.environ)[0], "SKIP")
 
     def test_named_unittest_must_run_from_the_declared_file(self):
         with TemporaryDirectory() as directory, redirect_stdout(io.StringIO()):
