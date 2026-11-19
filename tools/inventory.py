@@ -32,6 +32,19 @@ def check_files(folder, cases):
         case["support"] = [test_path(folder, name) for name in case["support"]]
         declared.update([case["test"], *case["support"]])
 
+    tests = folder / "tests"
+    boundary = folder.resolve() / "tests"
+    if tests.is_symlink() or tests.resolve() != boundary:
+        raise ValueError(f"{folder.name}: tests/ must be a real directory inside the language folder")
+    for name in sorted(declared):
+        path = folder / name
+        try:
+            inside = path.resolve().is_relative_to(boundary)
+        except RuntimeError:
+            inside = False
+        if not inside or path.is_symlink():
+            raise ValueError(f"{folder.name}: declared fixture must stay inside tests/ without a file symlink: {name}")
+
     actual = {
         path.relative_to(folder).as_posix()
         for path in (folder / "tests").rglob("*")

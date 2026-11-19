@@ -19,6 +19,8 @@ Choose the language or runtime that controls the behavior. A second language can
 
 Run `python tools/inventory.py` from the repository root. Counts come from declared cases and unique primary test paths. Support files, such as a .NET project file, are tracked separately. The inventory checks that a test directory contains the declared files and case IDs are unique. A suite's individual assertion count belongs to the native runner report.
 
+Keep primary and support fixtures inside the language's real `tests/` directory. File symlinks and redirected test roots are rejected.
+
 Keep planned cases in a project test plan. Once an assertion exists, record its code location. Treat a case as verified only after it runs for the intended checkout and environment. Store skipped runs and known failures as their actual outcomes, even when the surrounding job is green.
 
 ## Run the examples

@@ -74,6 +74,41 @@ class InventoryTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, f"metadata.json: .*{diagnosis}"):
                     read_inventory(self.root)
 
+    def test_primary_and_support_fixtures_cannot_link_outside_tests(self):
+        primary = self.add_language("one", "CHECK-001")
+        outside = primary.parent.parent / "outside.py"
+        outside.write_text("# External file\n", encoding="utf-8")
+        support = primary.with_name("support.py")
+        metadata = primary.parent.parent / "metadata.json"
+        manifest = json.loads(metadata.read_text(encoding="utf-8"))
+        manifest["cases"][0]["support"] = ["tests/support.py"]
+        metadata.write_text(json.dumps(manifest), encoding="utf-8")
+        try:
+            support.symlink_to(outside)
+        except (OSError, NotImplementedError) as error:
+            self.skipTest(f"host cannot create symbolic links: {error}")
+        with self.assertRaisesRegex(ValueError, "inside tests/.*support.py"):
+            read_inventory(self.root)
+        support.unlink()
+        support.touch()
+        self.assertEqual(set(read_inventory(self.root)), {"one"})
+        primary.unlink()
+        primary.symlink_to(outside)
+        with self.assertRaisesRegex(ValueError, "inside tests/.*check.py"):
+            read_inventory(self.root)
+
+    def test_tests_root_cannot_be_a_directory_link(self):
+        primary = self.add_language("one", "CHECK-001")
+        tests = primary.parent
+        external = tests.with_name("external")
+        tests.rename(external)
+        try:
+            tests.symlink_to(external, target_is_directory=True)
+        except (OSError, NotImplementedError) as error:
+            self.skipTest(f"host cannot create directory links: {error}")
+        with self.assertRaisesRegex(ValueError, "real directory inside the language folder"):
+            read_inventory(self.root)
+
     def test_case_paths_are_normalized_before_counting(self):
         test = self.add_language("one", "CHECK-001")
         fixture = test.with_name("fixture.txt")
