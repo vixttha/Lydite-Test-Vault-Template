@@ -214,11 +214,15 @@ def read_manifest(folder, seen):
 
 
 def read_inventory(directory):
+    if directory.is_symlink():
+        raise ValueError(f"{directory}: inventory root must be a real directory")
     inventory = {}
     seen = set()
     for folder in sorted(directory.iterdir()):
         if not folder.is_dir():
             continue
+        if folder.is_symlink() or folder.resolve() != directory.resolve() / folder.name:
+            raise ValueError(f"{folder}: language root must stay inside the inventory")
         try:
             inventory[folder.name] = read_manifest(folder, seen)
         except (OSError, ValueError, RecursionError) as error:

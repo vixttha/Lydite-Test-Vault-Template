@@ -52,6 +52,19 @@ class InventoryTests(unittest.TestCase):
         self.add_language("one", "CHECK-001")
         self.assertEqual(set(read_inventory(self.root)), {"one"})
 
+    def test_language_root_cannot_redirect_outside_inventory(self):
+        test = self.add_language("one", "CHECK-001")
+        folder = test.parent.parent
+        with TemporaryDirectory() as target:
+            external = Path(target) / "external"
+            shutil.move(folder, external)
+            try:
+                folder.symlink_to(external, target_is_directory=True)
+            except (OSError, NotImplementedError) as error:
+                self.skipTest(f"host cannot create a directory link: {error}")
+            with self.assertRaisesRegex(ValueError, "language root must stay inside"):
+                read_inventory(self.root)
+
     def test_deleted_or_unlisted_files_fail_validation(self):
         test = self.add_language("one", "CHECK-001")
         test.rename(test.with_name("renamed.py"))
