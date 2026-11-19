@@ -192,8 +192,12 @@ def read_manifest(folder, seen):
             native = case["native_runner"]
             if not nonblank(native) or native not in NATIVE_RUNNERS:
                 raise ValueError(f"{case_id}: unknown native_runner {native!r}")
-        if "native_runner" in case and not nonblank(case.get("native_test")):
-            raise ValueError(f"{case_id}: native_runner requires a named native_test")
+        if "native_runner" in case:
+            name = case.get("native_test")
+            node_path = (native == "node-tap" and isinstance(name, list)
+                         and bool(name) and all(nonblank(part) for part in name))
+            if not (nonblank(name) or node_path):
+                raise ValueError(f"{case_id}: native_runner requires a named native_test")
         if "native_test" in case and "native_runner" not in case:
             raise ValueError(f"{case_id}: native_test requires a native_runner")
         for field, requires_native in (("native_command_index", True), ("assertion_command_index", False)):

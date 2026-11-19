@@ -127,7 +127,8 @@ def selected_outcome(runner, output, name, source):
         outcomes = [event["Action"] for event in events
                     if event.get("Test") == name and event.get("Action") in ("pass", "skip", "fail")]
     elif runner == "node-tap":
-        outcomes = [status for path, status in node_results(output) if path[-1] == name]
+        outcomes = [status for path, status in node_results(output)
+                    if (path if isinstance(name, list) else path[-1]) == name]
     elif runner == "rust-libtest":
         outcomes = [{"ok": "pass", "ignored": "skip", "FAILED": "fail"}[status]
                     for status in re.findall(rf"^test {re.escape(name)} \.\.\. (ok|ignored|FAILED)(?:$|,)", output, re.M)]

@@ -223,6 +223,22 @@ class NativeOutcomeTests(unittest.TestCase):
             self.assertEqual(execute_case({**case, "native_test": " name "}, directory, os.environ)[0], "PASS")
             self.assertEqual(execute_case({**case, "native_test": "name"}, directory, os.environ)[0], "FAIL")
 
+    @unittest.skipUnless(shutil.which("node"), "Node is needed for nested test regression checks")
+    def test_node_native_paths_distinguish_identical_leaf_names(self):
+        with TemporaryDirectory() as directory, redirect_stdout(io.StringIO()):
+            test = Path(directory) / "fixture.test.mjs"
+            test.write_text(
+                "import {describe, it} from 'node:test';\n"
+                "describe('outer', () => describe('inner', () => it('leaf', () => {})));\n"
+                "describe('other', () => it('leaf', {skip:true}, () => {}));\n"
+            )
+            case = {"native_runner": "node-tap", "test": test.name,
+                    "commands": [["node", "--test", "--test-reporter=tap", str(test)]]}
+            for name, expected in ((["outer", "inner", "leaf"], "PASS"),
+                                   (["other", "leaf"], "SKIP"), ("leaf", "FAIL")):
+                with self.subTest(name=name):
+                    self.assertEqual(execute_case({**case, "native_test": name}, directory, os.environ)[0], expected)
+
     def test_unittest_records_passes_alongside_setup_and_subtest_skips(self):
         with TemporaryDirectory() as directory:
             test = Path(directory) / "test_fixture.py"
