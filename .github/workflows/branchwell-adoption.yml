@@ -1,4 +1,4 @@
-name: Verify Branchwell adoption
+name: Validate Branchwell plan and Lydite inventory
 on:
   push:
     branches: [branchwell-adoption]
@@ -13,7 +13,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - name: Verify adoption and template inventory
+      - name: Check documented plan and Lydite declarations
         run: |
           test -s docs/branchwell-adoption.md
           python3 tools/inventory.py
+          {
+            printf '### Branchwell plan validation\n\n'
+            printf 'Lydite checkout: %s\n' "$(git rev-parse HEAD)"
+            printf 'Checked the Branchwell plan file and Lydite declaration inventory.\n'
+            printf 'Branchwell case execution: pending consumer evidence.\n'
+          } >> "$GITHUB_STEP_SUMMARY"

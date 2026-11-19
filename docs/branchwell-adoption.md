@@ -1,4 +1,6 @@
-# Branchwell adoption
+# Branchwell adoption plan
+
+The public workflow checks this plan file and Lydite’s declaration inventory. A passing run records the Lydite checkout. Branchwell case execution requires its own run in the consumer checkout and evidence for each observed case, including the manual status for UI-002.
 
 Base audit: main at 87d25d8. The template already supplies inventory validation, documented installation, and separate execution receipts. The default-branch workflow uses standard hosted Linux and Windows runners. A release-target dispatch on the newer hardening branch failed at its named release target gate, so that run provides no language or archive result.
 
