@@ -503,11 +503,15 @@ def main():
     group.add_argument("--run", metavar="LANGUAGE", help="execute one language folder")
     group.add_argument("--runner", choices=sorted(RUNNERS), help="execute every case assigned to the specified runner")
     parser.add_argument("--evidence", type=Path, help="write a JSON report for a case run")
+    parser.add_argument("--require-upstream", action="store_true", help="require Lydite's official case inventory")
     args = parser.parse_args()
     if args.evidence and not (args.run or args.runner):
         parser.error("--evidence requires --run or --runner")
     try:
         inventory = read_inventory(ROOT / "languages", selected=args.run)
+        if args.require_upstream:
+            from validation_contract import validate_inventory
+            validate_inventory(inventory)
         if args.run:
             if args.run not in inventory:
                 raise ValueError(f"Unknown language folder: {args.run}")

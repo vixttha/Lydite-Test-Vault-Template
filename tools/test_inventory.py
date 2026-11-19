@@ -14,6 +14,7 @@ from urllib.error import HTTPError
 from archive_manifest import load_manifest
 from inventory import check_windows_paths, checkout_identity, execute_case, print_inventory, read_inventory, report_destination, run_cases, runtime_version
 from native_outcomes import passed_tests
+from validation_contract import validate_inventory
 from release_record import (
     SUPPORTING_JOBS, github_resource, main as record_release, receipt_context,
     supporting_evidence, verify_candidate_target,
@@ -65,6 +66,13 @@ class InventoryTests(unittest.TestCase):
                 self.skipTest(f"host cannot create a directory link: {error}")
             with self.assertRaisesRegex(ValueError, "language root must stay inside"):
                 read_inventory(self.root)
+
+    def test_upstream_coverage_checks_all_declared_tracks(self):
+        inventory = read_inventory(Path(__file__).resolve().parents[1] / "languages")
+        validate_inventory(inventory)
+        inventory.pop("ruby")
+        with self.assertRaisesRegex(ValueError, "ubuntu-24.04/ruby"):
+            validate_inventory(inventory)
 
     def test_deleted_or_unlisted_files_fail_validation(self):
         test = self.add_language("one", "CHECK-001")
