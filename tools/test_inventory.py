@@ -152,6 +152,25 @@ class CommandOutcomeTests(unittest.TestCase):
                     self.assertEqual(actual, status)
                     self.assertIn(reason, detail)
 
+    def test_native_stage_survives_successful_post_processing(self):
+        with TemporaryDirectory() as directory:
+            test_file = Path(directory) / "test_contract.py"
+            test_file.write_text(
+                "import unittest\nclass Contract(unittest.TestCase):\n"
+                "    def test_contract(self): self.assertEqual(2 + 2, 4)\n",
+                encoding="utf-8",
+            )
+            build = [sys.executable, "-c", "pass"]
+            suite = [sys.executable, "-m", "unittest", "-v", "test_contract"]
+            cleanup = [sys.executable, "-c", "print('clean')"]
+            case = {"commands": [build, suite, cleanup], "native_runner": "unittest", "native_command_index": 1}
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(execute_case(case, directory, os.environ)[0], "PASS")
+                for stage in range(3):
+                    commands = case["commands"].copy()
+                    commands[stage] = [sys.executable, "-c", "raise SystemExit(3)"]
+                    self.assertEqual(execute_case({**case, "commands": commands}, directory, os.environ)[0], "FAIL")
+
 
 class CheckoutIdentityTests(unittest.TestCase):
     def test_exact_identity_requires_clean_inputs_and_the_intended_root(self):

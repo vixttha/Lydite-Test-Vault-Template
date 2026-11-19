@@ -89,7 +89,7 @@ def read_manifest(folder, seen):
         raise ValueError("cases: expected at least one declared case")
     for index, case in enumerate(cases, 1):
         label = f"case {index}"
-        required_fields(case, {"id", "purpose", "test", "support", "commands"}, {"native_runner"}, label)
+        required_fields(case, {"id", "purpose", "test", "support", "commands"}, {"native_runner", "native_command_index"}, label)
         case_id = case["id"]
         if not nonblank(case_id) or not CASE_ID.fullmatch(case_id) or case_id in seen:
             raise ValueError(f"{label}: invalid or duplicate case {case_id}")
@@ -107,6 +107,10 @@ def read_manifest(folder, seen):
             native = case["native_runner"]
             if not nonblank(native) or native not in NATIVE_RUNNERS:
                 raise ValueError(f"{case_id}: unknown native_runner {native!r}")
+        if "native_command_index" in case:
+            native_index = case["native_command_index"]
+            if "native_runner" not in case or type(native_index) is not int or not 0 <= native_index < len(commands):
+                raise ValueError(f"{case_id}: native_command_index requires a native runner and a valid zero-based command index")
         seen.add(case_id)
     check_files(folder, cases)
     return manifest
@@ -142,9 +146,11 @@ class CheckoutDrift(RuntimeError):
 
 
 def execute_case(case, folder, env, *, timeout=180, guard=None):
-    output = ""
+    native_output = ""
+    commands = case["commands"]
+    native_index = case.get("native_command_index", len(commands) - 1)
     with TemporaryDirectory(prefix="lydite-") as temp:
-        for argv in case["commands"]:
+        for index, argv in enumerate(commands):
             if guard:
                 guard()
             command = [arg.replace("{tmp}", temp) for arg in argv]
@@ -164,14 +170,15 @@ def execute_case(case, folder, env, *, timeout=180, guard=None):
             finally:
                 if guard:
                     guard()
-            output = result.stdout
-            print(output, end="", flush=True)
+            if index == native_index:
+                native_output = result.stdout
+            print(result.stdout, end="", flush=True)
             if result.returncode:
                 return "FAIL", f"{argv[0]} exited with code {result.returncode}"
     if native := case.get("native_runner"):
         try:
-            if not passed_tests(native, output):
-                if skipped_tests(native, output):
+            if not passed_tests(native, native_output):
+                if skipped_tests(native, native_output):
                     return "SKIP", f"{native} reported skipped tests and no passes"
                 return "FAIL", f"{native} reported no passing tests"
         except (ValueError, AttributeError):
