@@ -137,6 +137,31 @@ class NativeOutcomeTests(unittest.TestCase):
                             "commands": [["node", "--test", "--test-reporter=tap", str(test)]]}
                     self.assertEqual(execute_case(case, directory, os.environ)[0], wanted)
 
+    def test_unittest_records_passes_alongside_setup_and_subtest_skips(self):
+        with TemporaryDirectory() as directory:
+            test = Path(directory) / "test_fixture.py"
+            case = {"native_runner": "unittest",
+                    "commands": [[sys.executable, "-m", "unittest", "discover"]]}
+            source = "import unittest\n"
+            setup_skip = (
+                "class Unavailable(unittest.TestCase):\n"
+                "    @classmethod\n"
+                "    def setUpClass(cls): raise unittest.SkipTest('optional dependency')\n"
+                "    def test_unavailable(self): self.fail('unreachable')\n"
+            )
+            subtests = (
+                "class Mixed(unittest.TestCase):\n"
+                "    def test_mixed(self):\n"
+                "        with self.subTest('optional'): self.skipTest('optional dependency')\n"
+                "        with self.subTest('required'): self.assertEqual(2 + 2, 4)\n"
+            )
+            passing = "class Passing(unittest.TestCase):\n    def test_pass(self): self.assertTrue(True)\n"
+            for content, wanted in ((passing + setup_skip, "PASS"), (subtests, "PASS"),
+                                    (setup_skip, "SKIP"), ("", "FAIL")):
+                with self.subTest(wanted=wanted), redirect_stdout(io.StringIO()):
+                    test.write_text(source + content, encoding="utf-8")
+                    self.assertEqual(execute_case(case, directory, os.environ)[0], wanted)
+
 
 class CommandOutcomeTests(unittest.TestCase):
     def test_failure_timeout_and_missing_executable_have_distinct_outcomes(self):

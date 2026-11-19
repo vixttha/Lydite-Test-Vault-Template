@@ -9,7 +9,7 @@ import subprocess
 from pathlib import Path, PurePosixPath
 from tempfile import TemporaryDirectory
 
-from native_outcomes import NATIVE_RUNNERS, passed_tests, skipped_tests
+from native_outcomes import NATIVE_RUNNERS, passed_tests, skipped_tests, unittest_command
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -154,6 +154,8 @@ def execute_case(case, folder, env, *, timeout=180, guard=None):
             if guard:
                 guard()
             command = [arg.replace("{tmp}", temp) for arg in argv]
+            if case.get("native_runner") == "unittest" and index == native_index:
+                command = unittest_command(command)
             try:
                 result = subprocess.run(
                     command, cwd=folder, env=env, check=False, timeout=timeout,
