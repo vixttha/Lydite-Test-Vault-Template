@@ -8,7 +8,7 @@ import subprocess
 from pathlib import Path, PurePosixPath
 from tempfile import TemporaryDirectory
 
-from native_outcomes import NATIVE_RUNNERS, passed_tests
+from native_outcomes import NATIVE_RUNNERS, passed_tests, skipped_tests
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -85,29 +85,51 @@ def print_inventory(inventory):
     print(f'\n{sum(len(m["cases"]) for m in inventory.values())} declared cases in {len(inventory)} language folders.')
 
 
+def execute_case(case, folder, env, *, timeout=180):
+    output = ""
+    with TemporaryDirectory(prefix="lydite-") as temp:
+        for argv in case["commands"]:
+            command = [arg.replace("{tmp}", temp) for arg in argv]
+            try:
+                result = subprocess.run(
+                    command, cwd=folder, env=env, check=False, timeout=timeout,
+                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace",
+                )
+            except subprocess.TimeoutExpired as error:
+                if error.stdout:
+                    print(error.stdout.decode(errors="replace"), end="", flush=True)
+                return "FAIL", f"{argv[0]} timed out after {timeout:g}s"
+            except FileNotFoundError:
+                return "BLOCKED", f"required executable unavailable: {argv[0]}"
+            except OSError as error:
+                return "BLOCKED", f"cannot start {argv[0]}: {error}"
+            output = result.stdout
+            print(output, end="", flush=True)
+            if result.returncode:
+                return "FAIL", f"{argv[0]} exited with code {result.returncode}"
+    if native := case.get("native_runner"):
+        try:
+            if not passed_tests(native, output):
+                if skipped_tests(native, output):
+                    return "SKIP", f"{native} reported skipped tests and no passes"
+                return "FAIL", f"{native} reported no passing tests"
+        except (ValueError, AttributeError):
+            return "FAIL", f"{native} reported an invalid result"
+    return "PASS", "case passed"
+
+
 def run_cases(inventory, languages):
     sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "DOTNET_CLI_TELEMETRY_OPTOUT": "1"}
     print(f"Checkout {sha} | run {env.get('GITHUB_RUN_ID', 'local')} | attempt {env.get('GITHUB_RUN_ATTEMPT', 'n/a')}", flush=True)
+    results = []
     for slug in languages:
         for case in inventory[slug]["cases"]:
             print(f'{case["id"]} | {case["purpose"]}', flush=True)
-            with TemporaryDirectory(prefix="lydite-") as temp:
-                for argv in case["commands"]:
-                    command = [arg.replace("{tmp}", temp) for arg in argv]
-                    if case.get("native_runner"):
-                        result = subprocess.run(
-                            command, cwd=ROOT / "languages" / slug, env=env, check=False,
-                            timeout=180, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                            text=True, errors="replace",
-                        )
-                        print(result.stdout, end="", flush=True)
-                        result.check_returncode()
-                    else:
-                        subprocess.run(command, cwd=ROOT / "languages" / slug, env=env, check=True, timeout=180)
-                if (native := case.get("native_runner")) and not passed_tests(native, result.stdout):
-                    raise ValueError(f'{case["id"]}: {native} reported no passing tests')
-            print(f'{case["id"]} | PASS', flush=True)
+            status, reason = execute_case(case, ROOT / "languages" / slug, env)
+            print(f'{case["id"]} | {status} | {reason}', flush=True)
+            results.append(status)
+    return 0 if all(status == "PASS" for status in results) else 1
 
 
 def main():
@@ -121,12 +143,12 @@ def main():
         if args.run:
             if args.run not in inventory:
                 raise ValueError(f"Unknown language folder: {args.run}")
-            run_cases(inventory, [args.run])
+            return run_cases(inventory, [args.run])
         elif args.runner:
             languages = [slug for slug, manifest in inventory.items() if manifest["runner"] == args.runner]
             if not languages:
                 raise ValueError(f"No language folders were assigned to {args.runner}")
-            run_cases(inventory, languages)
+            return run_cases(inventory, languages)
         else:
             print_inventory(inventory)
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
@@ -134,4 +156,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

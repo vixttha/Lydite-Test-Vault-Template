@@ -1,9 +1,11 @@
 import json
+import os
+import sys
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from inventory import read_inventory
+from inventory import execute_case, read_inventory
 from native_outcomes import passed_tests
 
 
@@ -78,3 +80,18 @@ class NativeOutcomeTests(unittest.TestCase):
                 self.assertEqual(passed_tests(runner, passing), 1)
                 self.assertEqual(passed_tests(runner, empty), 0)
                 self.assertEqual(passed_tests(runner, skipped), 0)
+
+
+class CommandOutcomeTests(unittest.TestCase):
+    def test_failure_timeout_and_missing_executable_have_distinct_outcomes(self):
+        commands = [
+            ([sys.executable, "-c", "raise SystemExit(3)"], "FAIL", "code 3", 10),
+            ([sys.executable, "-c", "import time; time.sleep(10)"], "FAIL", "timed out", 0.1),
+            (["lydite-fixture-missing-executable"], "BLOCKED", "unavailable", 10),
+        ]
+        with TemporaryDirectory() as directory:
+            for command, status, reason, timeout in commands:
+                with self.subTest(command=command):
+                    actual, detail = execute_case({"commands": [command]}, directory, os.environ, timeout=timeout)
+                    self.assertEqual(actual, status)
+                    self.assertIn(reason, detail)

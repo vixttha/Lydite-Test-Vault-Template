@@ -7,12 +7,26 @@ import re
 NATIVE_RUNNERS = {"go-json", "node-tap", "rust-libtest", "unittest"}
 
 
+def go_events(output):
+    return (json.loads(line) for line in output.splitlines() if line.startswith("{"))
+
+
+def skipped_tests(runner, output):
+    if runner == "go-json":
+        return sum(bool(event.get("Test") and event.get("Action") == "skip") for event in go_events(output))
+    pattern = {
+        "node-tap": r"^# skipped (\d+)\s*$",
+        "rust-libtest": r"^test result: ok\. .*? (\d+) ignored;",
+        "unittest": r"^OK \([^\n]*?skipped=(\d+)",
+    }[runner]
+    return sum(map(int, re.findall(pattern, output, re.M)))
+
+
 def passed_tests(runner, output):
     if runner == "go-json":
         return sum(
             bool(event.get("Test") and event.get("Action") == "pass")
-            for line in output.splitlines() if line.startswith("{")
-            if isinstance(event := json.loads(line), dict)
+            for event in go_events(output) if isinstance(event, dict)
         )
     if runner == "node-tap":
         return int(matches[-1]) if (matches := re.findall(r"^# pass (\d+)\s*$", output, re.M)) else 0
