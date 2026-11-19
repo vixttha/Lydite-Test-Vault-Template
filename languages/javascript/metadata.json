@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "language": "JavaScript",
+  "runtime": "Node.js 24 / node:test",
+  "runner": "ubuntu-24.04",
+  "cases": [
+    {
+      "id": "JAVASCRIPT-001",
+      "purpose": "Serialized JSON preserves Unicode and numeric types.",
+      "test": "tests/contract.test.mjs",
+      "support": [],
+      "commands": [
+        [
+          "node",
+          "--test",
+          "tests/contract.test.mjs"
+        ]
+      ]
+    }
+  ]
+}
