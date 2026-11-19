@@ -9,6 +9,7 @@
       "purpose": "A rejected debit preserves the balance.",
       "test": "tests/test_contract.py",
       "support": [],
+      "native_runner": "unittest",
       "commands": [
         [
           "python",

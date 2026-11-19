@@ -8,6 +8,8 @@ import subprocess
 from pathlib import Path, PurePosixPath
 from tempfile import TemporaryDirectory
 
+from native_outcomes import NATIVE_RUNNERS, passed_tests
+
 
 ROOT = Path(__file__).resolve().parents[1]
 CASE_ID = re.compile(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*-[0-9]{3,}")
@@ -61,6 +63,9 @@ def read_inventory(directory):
                 for argv in commands
             ):
                 raise ValueError(f"{case_id}: expected one or more nonempty argument lists")
+            native = case.get("native_runner")
+            if native is not None and (not isinstance(native, str) or native not in NATIVE_RUNNERS):
+                raise ValueError(f"{case_id}: unknown native runner {native!r}")
             seen.add(case_id)
         check_files(folder, cases)
         inventory[folder.name] = manifest
@@ -90,7 +95,18 @@ def run_cases(inventory, languages):
             with TemporaryDirectory(prefix="lydite-") as temp:
                 for argv in case["commands"]:
                     command = [arg.replace("{tmp}", temp) for arg in argv]
-                    subprocess.run(command, cwd=ROOT / "languages" / slug, env=env, check=True, timeout=180)
+                    if case.get("native_runner"):
+                        result = subprocess.run(
+                            command, cwd=ROOT / "languages" / slug, env=env, check=False,
+                            timeout=180, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            text=True, errors="replace",
+                        )
+                        print(result.stdout, end="", flush=True)
+                        result.check_returncode()
+                    else:
+                        subprocess.run(command, cwd=ROOT / "languages" / slug, env=env, check=True, timeout=180)
+                if (native := case.get("native_runner")) and not passed_tests(native, result.stdout):
+                    raise ValueError(f'{case["id"]}: {native} reported no passing tests')
             print(f'{case["id"]} | PASS', flush=True)
 
 

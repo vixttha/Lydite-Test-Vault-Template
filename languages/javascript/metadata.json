@@ -9,10 +9,12 @@
       "purpose": "Serialized JSON preserves Unicode and numeric types.",
       "test": "tests/contract.test.mjs",
       "support": [],
+      "native_runner": "node-tap",
       "commands": [
         [
           "node",
           "--test",
+          "--test-reporter=tap",
           "tests/contract.test.mjs"
         ]
       ]

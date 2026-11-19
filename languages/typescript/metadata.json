@@ -9,10 +9,12 @@
       "purpose": "Unknown payloads accept integer counts and reject incompatible types.",
       "test": "tests/contract.test.mts",
       "support": [],
+      "native_runner": "node-tap",
       "commands": [
         [
           "node",
           "--test",
+          "--test-reporter=tap",
           "tests/contract.test.mts"
         ]
       ]

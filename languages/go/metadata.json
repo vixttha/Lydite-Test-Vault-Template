@@ -9,12 +9,13 @@
       "purpose": "A health endpoint returns the expected HTTP status and payload.",
       "test": "tests/contract_test.go",
       "support": [],
+      "native_runner": "go-json",
       "commands": [
         [
           "go",
           "test",
           "-count=1",
-          "-v",
+          "-json",
           "tests/contract_test.go"
         ]
       ]

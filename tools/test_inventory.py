@@ -4,6 +4,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from inventory import read_inventory
+from native_outcomes import passed_tests
 
 
 class InventoryTests(unittest.TestCase):
@@ -50,3 +51,30 @@ class InventoryTests(unittest.TestCase):
         self.add_language("two", "CHECK-001")
         with self.assertRaisesRegex(ValueError, "duplicate case CHECK-001"):
             read_inventory(self.root)
+
+
+class NativeOutcomeTests(unittest.TestCase):
+    def test_native_results_require_a_positive_pass_count(self):
+        reports = {
+            "go-json": (
+                '{"Action":"pass","Test":"TestBound"}',
+                '{"Action":"pass","Package":"pkg"}',
+                '{"Action":"skip","Test":"TestBound"}',
+            ),
+            "node-tap": ("# pass 1\n", "# pass 0\n", "# pass 0\n# skipped 1\n"),
+            "rust-libtest": (
+                "test result: ok. 1 passed; 0 failed;",
+                "test result: ok. 0 passed; 0 failed;",
+                "test result: ok. 0 passed; 0 failed; 1 ignored;",
+            ),
+            "unittest": (
+                "Ran 1 test in 0.001s\n\nOK\n",
+                "Ran 0 tests in 0.001s\n\nOK\n",
+                "Ran 1 test in 0.001s\n\nOK (skipped=1)\n",
+            ),
+        }
+        for runner, (passing, empty, skipped) in reports.items():
+            with self.subTest(runner=runner):
+                self.assertEqual(passed_tests(runner, passing), 1)
+                self.assertEqual(passed_tests(runner, empty), 0)
+                self.assertEqual(passed_tests(runner, skipped), 0)
