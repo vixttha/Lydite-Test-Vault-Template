@@ -20,12 +20,14 @@ def main():
     passed = actual == expected
     script = Path(__file__).resolve()
     manifest = script.with_name("case.json")
-    case = json.loads(manifest.read_text(encoding="utf-8"))
+    plan = manifest.read_bytes()
+    case = json.loads(plan)
     checkout = subprocess.check_output(
         [sys.executable, script.parents[2] / "source_commit.py", script, manifest], text=True,
     ).strip()
     receipt = {
-        "schema_version": 1, "case_id": case["case_id"], "check_id": "python-check",
+        "schema_version": 2, "case_id": case["case_id"], "check_id": "python-check",
+        "case_plan_sha256": hashlib.sha256(plan).hexdigest(),
         "checkout_sha": checkout,
         "run_id": os.environ["GITHUB_RUN_ID"], "attempt": os.environ["GITHUB_RUN_ATTEMPT"],
         "environment": {"os": platform.system(), "runtime": platform.python_version()},

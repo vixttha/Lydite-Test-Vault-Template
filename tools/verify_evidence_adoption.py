@@ -1,5 +1,6 @@
 """Exercise opt-in v0.0.3 receipt checks in an existing v0.0.2 project."""
 
+import hashlib
 import json
 import os
 import shutil
@@ -32,6 +33,7 @@ def test_receipts(project, env, command, directory, observation):
         ("wrong schema", {"schema_version": True}, "INVALID"),
         ("bad environment", {"environment": {}}, "INVALID"),
         ("wrong evidence hash", {"evidence_sha256": "0" * 64}, "INVALID"),
+        ("wrong case plan", {"case_plan_sha256": "0" * 64}, "case_plan_sha256 does not match"),
         ("suite failure", {"status": "fail"}, "| FAIL |"),
         ("skipped suite", {"status": "skip"}, "| SKIP |"),
         ("blocked suite", {"status": "blocked"}, "| BLOCKED |"),
@@ -57,16 +59,32 @@ def test_receipts(project, env, command, directory, observation):
     observation.write_bytes(old_observation)
     print("Rejected missing and duplicate receipts, duplicate JSON keys, and changed observation bytes.")
 
-    no_shared = observation.with_name("no-shared.json")
-    write_json(no_shared, {
-        "schema_version": 1, "case_id": "CLI-001",
-        "required_checks": ["node-test", "python-check"], "shared_evidence": False,
-    })
+    variant = observation.with_name("plan-variant.json")
+    plan = json.loads((project / EXAMPLE / "case.json").read_bytes())
+    write_json(variant, {**plan, "required_checks": ["python-check"]})
+    node = directory / "node.json"
+    node.unlink()
+    run([*command[:2], "--case", str(variant), "--receipts", str(directory), "--evidence", str(observation)],
+        project, result=1, includes="case_plan_sha256 does not match", env=quiet_env)
+    node.write_bytes(original[node])
+
+    write_json(variant, {**plan, "shared_evidence": False})
+    digest = hashlib.sha256(variant.read_bytes()).hexdigest()
     for path, blob in original.items():
-        write_json(path, {**json.loads(blob), "evidence_sha256": None})
-    run([*command[:2], "--case", str(no_shared), "--receipts", str(directory)],
-        project, includes="Overall: PASS", env=quiet_env)
-    print("Verified receipts for a case without shared observations.")
+        write_json(path, {**json.loads(blob), "evidence_sha256": None, "case_plan_sha256": digest})
+    verify = [*command[:2], "--case", str(variant), "--receipts", str(directory)]
+    run(verify, project, includes="Overall: PASS", env=quiet_env)
+
+    write_json(variant, {**plan, "schema_version": 1, "shared_evidence": False})
+    run(verify, project, result=1, includes="INVALID", env=quiet_env)
+    for path, blob in original.items():
+        legacy = json.loads(blob)
+        legacy.pop("case_plan_sha256")
+        write_json(path, {**legacy, "schema_version": 1, "evidence_sha256": None})
+    legacy_output = run(verify, project, includes="Overall: PASS", env=quiet_env)
+    if "Legacy receipt v1" not in legacy_output:
+        raise AssertionError("legacy proof should disclose the missing plan binding")
+    print("Verified exact plan binding, rejection of changed required checks, and matching v1 compatibility.")
 
 
 def verify_upgrade(work):

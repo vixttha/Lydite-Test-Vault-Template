@@ -10,9 +10,11 @@ test('quote CLI returns the expected total and records its output', () => {
   const app = fileURLToPath(new URL('./app.mjs', import.meta.url));
   const evidence = execFileSync(process.execPath, [app, '125', '3']);
   writeFileSync(process.env.VAULT_EXAMPLE_EVIDENCE, evidence);
-  const { case_id } = JSON.parse(readFileSync(new URL('./case.json', import.meta.url), 'utf8'));
+  const plan = readFileSync(new URL('./case.json', import.meta.url));
+  const { case_id } = JSON.parse(plan);
   const receipt = {
-    schema_version: 1,
+    schema_version: 2,
+    case_plan_sha256: createHash('sha256').update(plan).digest('hex'),
     case_id,
     check_id: 'node-test',
     checkout_sha: execFileSync(process.env.VAULT_EXAMPLE_PYTHON || 'python3', [
