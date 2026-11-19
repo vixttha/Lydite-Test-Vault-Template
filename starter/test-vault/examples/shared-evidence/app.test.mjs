@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -27,6 +27,16 @@ test('quote CLI returns the expected total and records its output', () => {
   };
   try {
     assert.deepEqual(JSON.parse(evidence), { unit_cents: 125, quantity: 3, total_cents: 375 });
+    for (const args of [
+      [], ['125'], ['125', '3', 'extra'], ['', '3'], ['125', ' '],
+      ['-1', '3'], ['1.5', '3'], ['9007199254740992', '1'], ['9007199254740991', '2'],
+    ]) {
+      const result = spawnSync(process.execPath, [app, ...args], { encoding: 'utf8' });
+      assert.ifError(result.error);
+      assert.equal(result.status, 1, `expected quote rejection for ${JSON.stringify(args)}`);
+      assert.equal(result.stdout, '');
+      assert.match(result.stderr, /Expected/);
+    }
     receipt.status = 'pass';
   } finally {
     writeFileSync(join(process.env.VAULT_EXAMPLE_RECEIPTS, 'node.json'), JSON.stringify(receipt) + '\n');
