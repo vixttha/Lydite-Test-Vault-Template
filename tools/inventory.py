@@ -383,6 +383,10 @@ def report_destination(path):
         inputs.add(Path(directory).resolve())
     if any(destination.is_relative_to(prefix) for prefix in inputs):
         raise ValueError("evidence destination points inside project inputs")
+    if destination.is_dir() or any(parent.exists() and not parent.is_dir() for parent in destination.parents):
+        raise ValueError("evidence destination requires a filename with a directory parent")
+    if destination.exists() and not destination.is_file():
+        raise ValueError("evidence destination must be a regular file")
     try:
         tracked = subprocess.check_output(
             ["git", "-C", str(ROOT), "ls-files", "-z"], stderr=subprocess.DEVNULL,

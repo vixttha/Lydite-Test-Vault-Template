@@ -525,6 +525,17 @@ class CheckoutIdentityTests(unittest.TestCase):
                         report_destination(path / "report.json")
                 self.assertEqual(report_destination(base / "report.json"), base / "report.json")
 
+    def test_report_preflight_rejects_directory_and_file_parent(self):
+        with TemporaryDirectory() as directory:
+            base = Path(directory)
+            parent = base / "file"
+            parent.touch()
+            with patch("inventory.ROOT", base / "project"), patch("inventory.execute_case") as execute:
+                for path in (base, parent / "report.json"):
+                    with self.assertRaisesRegex(ValueError, "filename with a directory parent"):
+                        run_cases({}, [], path)
+                execute.assert_not_called()
+
     def test_report_rejects_tracked_destinations_before_running_cases(self):
         with TemporaryDirectory() as directory:
             root = Path(directory)
