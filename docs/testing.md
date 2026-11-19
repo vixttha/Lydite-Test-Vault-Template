@@ -47,3 +47,5 @@ Read `receipt.json` in the relevant artifact and match its checkout and tree to 
 ## Check maintained documentation
 
 Install the pinned parser with `python3 -m pip install --require-hashes -r tools/markdown-requirements.txt`. Run `python3 tools/check_doc_links.py` from the project checkout.
+
+Use `python3 tools/check_doc_links.py --tree HEAD` to verify the committed snapshot. The default command checks the working tree, including draft files.

@@ -1,11 +1,10 @@
-import contextlib
-import io
+import subprocess
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from check_doc_links import main
+from check_doc_links import check_tree, main, validate_paths
 
 from markdown_docs import MARKDOWN, link_targets
 
@@ -36,6 +35,22 @@ class MarkdownNavigationTests(unittest.TestCase):
                 "[Address](https://[bad) [Later](missing.md)\n", encoding="utf-8"
             )
             with self.assertRaises(SystemExit) as verdict:
-                main()
+                main([])
             self.assertIn("is invalid", str(verdict.exception))
             self.assertIn("missing.md has no destination", str(verdict.exception))
+
+    def test_committed_link_scope_does_not_use_untracked_content(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            readme = root / "README.md"
+            readme.write_text("[Draft](draft.md)\n")
+            git = ["git", "-C", directory]
+            subprocess.run([*git, "init", "-q"], check=True)
+            subprocess.run([*git, "add", "README.md"], check=True)
+            subprocess.run([*git, "-c", "user.name=Test Vault", "-c", "user.email=test@example.invalid",
+                            "-c", "commit.gpgsign=false", "commit", "-qm", "fixture"], check=True)
+            (root / "draft.md").write_text("# Draft\n")
+            self.assertEqual(validate_paths(root, [readme]), [])
+            paths, problems = check_tree(root, "HEAD")
+            self.assertEqual(paths, [readme])
+            self.assertIn("draft.md has no destination", problems[0])
