@@ -1,0 +1,98 @@
+name: Lydite v0.0.4.72 hosted runner controls
+on:
+  push:
+    branches: [audit/lydite-v0.0.4.72-runner-controls]
+permissions:
+  contents: read
+jobs:
+  controls:
+    name: Runner controls (${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, windows-latest]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 8
+    env:
+      REVIEW_SHA: ad5d6feb932f6f4ac8c15d31f6825dcbe89f9716
+      LYDITE_RUNNER: ${{ matrix.runner }}
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ad5d6feb932f6f4ac8c15d31f6825dcbe89f9716
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+      - name: Run the early failure handler and failed case controls
+        shell: bash
+        run: |
+          python -m pip install --only-binary=:all: --no-deps --require-hashes -r tools/markdown-requirements.txt
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
+          from pathlib import Path
+          from textwrap import dedent
+
+          output = Path(os.environ["RUNNER_TEMP"]) / "lydite-runner-controls"
+          runner = os.environ["LYDITE_RUNNER"]
+          checkout = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+          assert checkout == os.environ["REVIEW_SHA"]
+          content = Path(".github/workflows/validate.yml").read_text()
+          guard = content.split("      - name: Retain pre-execution lane failure\n", 1)[1]
+          guard = guard.split("        run: |\n", 1)[1].split("      - name: Upload per-case evidence", 1)[0]
+          for stage in ("setup", "inventory"):
+              stage_dir = output / stage
+              subprocess.run(["bash", "-e", "-c", dedent(guard)], check=True, env={
+                  **os.environ, "RUNNER_TEMP": str(stage_dir), "LYDITE_EARLY_STAGE": stage,
+                  "GITHUB_SHA": checkout,
+              })
+              record = json.loads((stage_dir / "lydite-cases/examples.json").read_bytes())
+              assert record["failed_stage"] == stage and record["outcome"] == "BLOCKED"
+              assert record["expected_checkout_sha"] == checkout and record["runner"] == runner
+              assert record["run_id"] == os.environ["GITHUB_RUN_ID"]
+              assert record["attempt"] == os.environ["GITHUB_RUN_ATTEMPT"]
+              assert record["cases"] and all(row["outcome"] == "NOT_RUN" for row in record["cases"])
+              print(f"{runner}: {stage} control recorded {len(record['cases'])} unstarted cases.")
+          adoption = output / "adoption"
+          subprocess.run([sys.executable, "tools/verify_full_adoption.py", "--evidence-dir", str(adoption)], check=True)
+          report = json.loads((adoption / "adoption-fail.json").read_bytes())
+          assert report["run_id"] == os.environ["GITHUB_RUN_ID"]
+          assert {row["case_id"]: row["outcome"] for row in report["cases"]} == {
+              "PYTHON-001": "FAIL", "PYTHON-002": "BLOCKED", "PYTHON-003": "PASS",
+          }
+          print(f"{runner}: real case failure retained alongside blocked and passing outcomes.")
+          PY
+      - name: Check named preflight against public GitHub targets
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          output="$RUNNER_TEMP/lydite-runner-controls/preflight"
+          export GITHUB_SHA="$REVIEW_SHA" GITHUB_EVENT_NAME=workflow_dispatch
+          LYDITE_RELEASE_VERSION=v0.0.9009 python tools/release_record.py --check-target --preflight-record "$output/available.json"
+          if LYDITE_RELEASE_VERSION=v0.0.4 python tools/release_record.py --check-target --preflight-record "$output/rejected.json"; then
+            exit 1
+          fi
+          python - "$output" <<'PY'
+          import json, os, sys
+          from pathlib import Path
+          root = Path(sys.argv[1])
+          available = json.loads((root / "available.json").read_bytes())
+          rejected = json.loads((root / "rejected.json").read_bytes())
+          assert available["outcome"] == "AVAILABLE" and available["checkout_sha"] == os.environ["REVIEW_SHA"]
+          assert rejected["outcome"] == "REJECTED" and rejected["reason"] == "published"
+          assert rejected["checkout_sha"] == os.environ["REVIEW_SHA"]
+          assert rejected["run_id"] == available["run_id"] == os.environ["GITHUB_RUN_ID"]
+          PY
+      - name: Upload hosted runner control records
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: lydite-runner-controls-${{ matrix.runner }}
+          path: ${{ runner.temp }}/lydite-runner-controls/
+          if-no-files-found: error
+          retention-days: 30
