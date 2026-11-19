@@ -117,6 +117,14 @@ def copy_and_check(sample, target):
     second = HEADER.replace("Suggested implementation", "Implementation").replace("Expected outcome", "Expected")
     case_path.write_text(catalog + "\n" + second + DIVIDER + row.replace("-001", "-002"), encoding="utf-8")
     run(command, target, result=1, includes="malformed Test Vault header for")
+    case_path.write_text("<pre>\n" + catalog + "</pre>\n", encoding="utf-8")
+    run(command, target, result=1, includes="no cases found")
+    blank = "| CORE-001 | Area | P0 | Implementation | <!-- hidden --> |\n"
+    case_path.write_text(HEADER + DIVIDER + blank, encoding="utf-8")
+    run(command, target, result=1, includes="invalid case row")
+    case_path.write_text(HEADER + DIVIDER + blank.replace("<!-- hidden -->", "Expected <!-- hidden -->"),
+                         encoding="utf-8")
+    run(command, target, includes="1 unique cases across 1 topics")
     for fence in ("```", "~~~"):
         example = f"{fence}markdown\n{HEADER}{DIVIDER}{row}{fence}\n\n"
         case_path.write_text(example + catalog, encoding="utf-8")

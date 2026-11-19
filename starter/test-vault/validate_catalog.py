@@ -12,6 +12,7 @@ HEADER = ["Case", "Area", "Priority", "Suggested implementation", "Expected outc
 SEPARATOR = re.compile(r":?-{3,}:?")
 FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 PRIORITIES = {"P0", "P1", "P2"}
+RAW_HTML = re.compile(r"^ {0,3}<(pre|script|style|textarea)(?=[\s>]|$)", re.I)
 
 
 def table_cells(line):
@@ -35,20 +36,37 @@ def read_cases(path):
     pending_divider = None
     fence = None
     comment = False
+    raw_tag = None
     for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-        if comment:
-            comment = "-->" not in raw
-            continue
-        marker = FENCE.match(raw)
+        marker = FENCE.match(raw) if not comment and not raw_tag else None
         if fence:
             if marker and marker[1][0] == fence[0] and len(marker[1]) >= len(fence) and not marker[2].strip():
                 fence = None
             continue
 
+        if raw_tag or (tag := RAW_HTML.match(raw)):
+            raw_tag = raw_tag or tag[1].lower()
+            if f"</{raw_tag}>" in raw.lower():
+                raw_tag = None
+            in_table = other_table = False
+            previous_header = None
+            continue
         indented_code = raw.expandtabs(4).startswith("    ")
+        if not indented_code and not marker:
+            if comment:
+                _, end, raw = raw.partition("-->")
+                if not end:
+                    continue
+                comment = False
+            while "<!--" in raw:
+                before, _, tail = raw.partition("<!--")
+                _, end, after = tail.partition("-->")
+                raw = before + after
+                if not end:
+                    comment = True
+                    break
         line = raw.strip()
-        starts_comment = not indented_code and line.startswith("<!--")
-        cells = table_cells(line) if not (marker or indented_code or starts_comment) and "|" in line else []
+        cells = table_cells(line) if not (marker or indented_code) and "|" in line else []
         if pending_divider is not None:
             if len(cells) != len(HEADER) or not all(SEPARATOR.fullmatch(cell) for cell in cells):
                 raise ValueError(f"{path}:{pending_divider}: expected a Markdown table divider after the header")
@@ -58,8 +76,6 @@ def read_cases(path):
 
         if marker and (marker[1][0] != chr(96) or chr(96) not in marker[2]):
             fence = marker[1]
-        if starts_comment:
-            comment = "-->" not in line
         if not cells:
             in_table = other_table = False
             previous_header = None
