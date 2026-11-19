@@ -39,8 +39,9 @@ The copied [v0.0.3 starter](../starter/test-vault/README.md) remains available f
 
 ## Validation and release receipts
 
-- **Routine validation.** Pushes, pull requests, and manual runs with a blank version publish `lydite-validation-attempt-*` with the tested checkout, event, pull request revisions when applicable, and same-attempt evidence.
-- **Named release candidate.** Manually run **Lydite validation** on the intended ref with `release_version` in `vMAJOR.MINOR.PATCH` form. The workflow checks GitHub release and tag state before testing and again before writing `lydite-release-candidate-attempt-*`. A published version or tag pointing to a different commit is rejected. The receipt records the target and pending owner decision.
+- **Routine validation.** Pushes to [the workflow's allowed branches](../.github/workflows/validate.yml#L5), pull requests, and manual runs with an empty version publish `lydite-validation-attempt-*` when all supporting checks succeed. The allowed push branches are `main` and the historical `hardening/v0.0.3` branch. Open or update a PR, or dispatch with an empty version, to validate another branch.
+- **Named release candidate.** Manually run **Lydite validation** on the intended ref with a `vMAJOR.MINOR.PATCH` target. Preflight records an available or rejected verdict and the reason in a separate artifact. A published version, conflicting tag, invalid target or unavailable authoritative result blocks candidate evidence. The workflow checks release state again immediately before issuing a receipt.
+- **Evidence.** Successful aggregate receipts bind the checkout, tree and run attempt to downloaded and verified Linux, Windows, adoption and Graphify payloads. Early language failures retain a blocked lane record where the runner can publish it.
 
 Read `receipt.json` in the relevant artifact and match its checkout and tree to the review target. Routine runs supersede older routine runs on the same ref. A named run is grouped by ref and version, so repeating that pair supersedes the earlier run for that pair.
 
