@@ -20,7 +20,7 @@ SUPPORTING_JOBS = (
     ("Inventory and starter adoption", "lydite-adoption"),
     ("Language examples (ubuntu-24.04)", "lydite-cases-ubuntu-24.04"),
     ("Language examples (windows-latest)", "lydite-cases-windows-latest"),
-    ("Rebuild and verify archived Graphify maps", None),
+    ("Rebuild and verify archived Graphify maps", "lydite-graphify"),
 )
 
 

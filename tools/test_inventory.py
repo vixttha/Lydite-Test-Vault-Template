@@ -746,7 +746,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
         def verify():
             return supporting_evidence(jobs, artifacts, run_id, attempt, "https://example.invalid/runs/123")
 
-        self.assertEqual([item["artifact"]["id"] for item in verify() if "artifact" in item], [1, 2, 3])
+        self.assertEqual([item["artifact"]["id"] for item in verify() if "artifact" in item], [1, 2, 3, 4])
         jobs[0]["run_attempt"] = 1
         with self.assertRaisesRegex(ValueError, "attempt 2.*Re-run all jobs"):
             verify()

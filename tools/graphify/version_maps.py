@@ -7,6 +7,7 @@ import base64
 import hashlib
 import io
 import json
+import os
 import posixpath
 import re
 import subprocess
@@ -286,7 +287,10 @@ def main():
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--export-missing", action="store_true", help="Emit missing map files and an updated index in CI logs")
     parser.add_argument("--fetch-upstream", action="store_true", help="fetch the pinned public AlderVale commits")
+    parser.add_argument("--verification-record", type=Path, help="write Graphify verification evidence for this run")
     args = parser.parse_args()
+    if args.verification_record and (not args.check or not args.fetch_upstream):
+        parser.error("--verification-record requires --check and --fetch-upstream")
     output = args.output.resolve()
     if output == MAPS or output.is_relative_to(MAPS) or (output.exists() and (not output.is_dir() or any(output.iterdir()))):
         parser.error("output must be an empty directory outside Graphify HQ")
@@ -298,9 +302,23 @@ def main():
         raise ValueError("Version manifest and archive folders do not match")
     scope = "public upstream" if args.fetch_upstream else "local Git objects only"
     print(f"Archive source verification: {scope}.")
-    publish_batch(output, manifest, args.fetch_upstream)
+    receipts = publish_batch(output, manifest, args.fetch_upstream)
     if args.check and compare(output, args.export_missing):
         sys.exit("Commit the matching Graphify HQ map, outline, and receipt for every archived version")
+    if args.verification_record:
+        lock = ROOT / "tools/graphify/requirements.txt"
+        record = {
+            "schema_version": 1, "kind": "graphify-verification",
+            "checkout_sha": git("rev-parse", "HEAD").decode("ascii").strip(),
+            "run_id": os.environ.get("GITHUB_RUN_ID"), "attempt": os.environ.get("GITHUB_RUN_ATTEMPT"),
+            "requirements_sha256": hashlib.sha256(lock.read_bytes()).hexdigest(),
+            "archives": {
+                tag: {key: receipt[key] for key in ("source_commit", "graph_sha256", "nodes", "edges")}
+                | {"mcp": "PASS"} for tag, receipt in receipts.items()
+            },
+        }
+        args.verification_record.parent.mkdir(parents=True, exist_ok=True)
+        args.verification_record.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
     if args.check:
         print(f"All {len(versions)} committed template maps match their verified rebuilds.")
 
