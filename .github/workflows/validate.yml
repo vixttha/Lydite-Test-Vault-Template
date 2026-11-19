@@ -2,7 +2,7 @@ name: Lydite validation
 
 on:
   push:
-    branches: [main]
+    branches: [main, hardening/v0.0.3]
   pull_request:
   workflow_dispatch:
 
@@ -168,3 +168,28 @@ jobs:
           if python tools/graphify/version_maps.py "$RUNNER_TEMP/lydite-bad-map" --check; then
             exit 1
           fi
+
+  release-candidate:
+    name: Record candidate source and validation
+    if: github.event.repository.private == false
+    needs: [inventory-and-adoption, examples, graphify]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+      - name: Record the validated candidate
+        env:
+          CANDIDATE_PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: python tools/release_record.py "${{ runner.temp }}/lydite-release/candidate.json"
+      - name: Upload candidate receipt
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: lydite-release-candidate-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/lydite-release/
+          if-no-files-found: error
+          retention-days: 30
