@@ -261,7 +261,11 @@ def print_inventory(inventory):
     for manifest in inventory.values():
         cases = manifest["cases"]
         test_files = len({case["test"] for case in cases})
-        print(f'| {manifest["language"]} | {manifest["runtime"]} | {len(cases)} | {test_files} | {manifest["runner"]} |')
+        language, runtime = (
+            " ".join(manifest[key].split()).replace("\\", "&#92;").replace("|", r"\|")
+            for key in ("language", "runtime")
+        )
+        print(f'| {language} | {runtime} | {len(cases)} | {test_files} | {manifest["runner"]} |')
     print(f'\n{sum(len(m["cases"]) for m in inventory.values())} declared cases in {len(inventory)} language folders.')
 
 

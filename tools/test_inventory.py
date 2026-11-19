@@ -133,6 +133,15 @@ class InventoryTests(unittest.TestCase):
                 check_windows_paths(self.root, paths)
         check_windows_paths(self.root, ["tests/ok.py", "tests/sub/also-ok.py"])
 
+    def test_inventory_table_escapes_pipes_and_collapses_newlines(self):
+        self.add_language("one", "CHECK-001")
+        manifests = read_inventory(self.root)
+        manifests["one"].update(language="Python | CPython", runtime="Python 3.12\nRunner")
+        output = io.StringIO()
+        with redirect_stdout(output):
+            print_inventory(manifests)
+        self.assertIn(r"| Python \| CPython | Python 3.12 Runner | 1 | 1 | ubuntu-24.04 |", output.getvalue())
+
     def test_case_paths_are_normalized_before_counting(self):
         test = self.add_language("one", "CHECK-001")
         fixture = test.with_name("fixture.txt")
