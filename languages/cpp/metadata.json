@@ -3,6 +3,7 @@
   "language": "C++",
   "runtime": "C++20 / g++",
   "runner": "ubuntu-24.04",
+  "runtime_probe": ["g++", "--version"],
   "cases": [
     {
       "id": "CPP-001",

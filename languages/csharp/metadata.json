@@ -3,6 +3,7 @@
   "language": "C#",
   "runtime": ".NET 8 / System.Text.Json",
   "runner": "ubuntu-24.04",
+  "runtime_probe": ["dotnet", "--version"],
   "cases": [
     {
       "id": "CSHARP-001",

@@ -17,6 +17,8 @@ Keep planned cases in a project test plan. Once an assertion exists, record its 
 
 ## Run the examples
 
+Add `--evidence path/to/report.json` to write one record per selected case. Each record lists its command arguments, declared and observed runtime, and PASS, FAIL, SKIP, or BLOCKED outcome. Hosted CI uploads those reports on passing and failing runs, with the checkout, run and attempt, job, and runner image information.
+
 Run `python tools/inventory.py --run <language-folder>` with the runtime listed in that folder's metadata. The arguments run from the language folder. A `{tmp}` argument is replaced with a fresh temporary directory. Lydite's CI executes the examples on standard public GitHub-hosted Ubuntu and Windows runners and records the exact checkout and result for each case.
 
 The copied [v0.0.3 starter](../starter/test-vault/README.md) remains available for adopters who only need a catalog and optional receipts. The legacy Graphify maps under [Graphify HQ](../Graphify%20HQ/README.md) describe the archived template versions. The original version-map builder needs the commit objects named in [the archive manifest](../versions/manifest.json) from the linked source repository if you rebuild those historical snapshots.

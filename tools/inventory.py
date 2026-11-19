@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import platform
 import re
 import subprocess
 from pathlib import Path, PurePosixPath
@@ -118,18 +119,57 @@ def execute_case(case, folder, env, *, timeout=180):
     return "PASS", "case passed"
 
 
-def run_cases(inventory, languages):
+def runtime_version(probe, folder, env):
+    if not probe:
+        return None
+    try:
+        result = subprocess.run(
+            probe, cwd=folder, env=env, timeout=20, capture_output=True,
+            text=True, errors="replace", check=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return (result.stdout or result.stderr).splitlines()[0] if result.stdout or result.stderr else None
+
+
+def run_cases(inventory, languages, evidence=None):
     sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1", "DOTNET_CLI_TELEMETRY_OPTOUT": "1"}
-    print(f"Checkout {sha} | run {env.get('GITHUB_RUN_ID', 'local')} | attempt {env.get('GITHUB_RUN_ATTEMPT', 'n/a')}", flush=True)
-    results = []
+    report = {
+        "schema_version": 1,
+        "checkout_sha": sha,
+        "run_id": env.get("GITHUB_RUN_ID"),
+        "attempt": env.get("GITHUB_RUN_ATTEMPT"),
+        "job": env.get("GITHUB_JOB"),
+        "runner": env.get("LYDITE_RUNNER"),
+        "environment": {
+            "os": platform.system(), "release": platform.release(), "architecture": platform.machine(),
+            "image_os": env.get("ImageOS"), "image_version": env.get("ImageVersion"),
+        },
+        "cases": [],
+    }
+    print(f"Checkout {sha} | run {report['run_id'] or 'local'} | attempt {report['attempt'] or 'n/a'}", flush=True)
     for slug in languages:
-        for case in inventory[slug]["cases"]:
+        manifest = inventory[slug]
+        folder = ROOT / "languages" / slug
+        runtime = runtime_version(manifest.get("runtime_probe"), folder, env)
+        for case in manifest["cases"]:
             print(f'{case["id"]} | {case["purpose"]}', flush=True)
-            status, reason = execute_case(case, ROOT / "languages" / slug, env)
+            if manifest.get("runtime_probe") and runtime is None:
+                status, reason = "BLOCKED", "declared runtime version probe failed"
+            else:
+                status, reason = execute_case(case, folder, env)
             print(f'{case["id"]} | {status} | {reason}', flush=True)
-            results.append(status)
-    return 0 if all(status == "PASS" for status in results) else 1
+            report["cases"].append({
+                "case_id": case["id"], "language": slug, "test": case["test"],
+                "declared_runner": manifest["runner"], "declared_runtime": manifest["runtime"],
+                "observed_runtime": runtime, "commands": case["commands"],
+                "outcome": status, "detail": reason,
+            })
+    if evidence is not None:
+        evidence.parent.mkdir(parents=True, exist_ok=True)
+        evidence.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    return 0 if all(case["outcome"] == "PASS" for case in report["cases"]) else 1
 
 
 def main():
@@ -137,18 +177,21 @@ def main():
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--run", metavar="LANGUAGE", help="execute one language folder")
     group.add_argument("--runner", choices=sorted(RUNNERS), help="execute every case assigned to the specified runner")
+    parser.add_argument("--evidence", type=Path, help="write a JSON report for a case run")
     args = parser.parse_args()
+    if args.evidence and not (args.run or args.runner):
+        parser.error("--evidence requires --run or --runner")
     try:
         inventory = read_inventory(ROOT / "languages")
         if args.run:
             if args.run not in inventory:
                 raise ValueError(f"Unknown language folder: {args.run}")
-            return run_cases(inventory, [args.run])
+            return run_cases(inventory, [args.run], args.evidence)
         elif args.runner:
             languages = [slug for slug, manifest in inventory.items() if manifest["runner"] == args.runner]
             if not languages:
                 raise ValueError(f"No language folders were assigned to {args.runner}")
-            return run_cases(inventory, languages)
+            return run_cases(inventory, languages, args.evidence)
         else:
             print_inventory(inventory)
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:

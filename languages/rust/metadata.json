@@ -3,6 +3,7 @@
   "language": "Rust",
   "runtime": "Rust / stable rustc test harness",
   "runner": "ubuntu-24.04",
+  "runtime_probe": ["rustc", "--version"],
   "cases": [
     {
       "id": "RUST-001",

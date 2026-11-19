@@ -3,6 +3,7 @@
   "language": "JavaScript",
   "runtime": "Node.js 24 / node:test",
   "runner": "ubuntu-24.04",
+  "runtime_probe": ["node", "--version"],
   "cases": [
     {
       "id": "JAVASCRIPT-001",

@@ -3,6 +3,7 @@
   "language": "Python",
   "runtime": "Python 3.12 / unittest",
   "runner": "ubuntu-24.04",
+  "runtime_probe": ["python", "--version"],
   "cases": [
     {
       "id": "PYTHON-001",

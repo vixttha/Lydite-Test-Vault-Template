@@ -3,6 +3,7 @@
   "language": "PowerShell",
   "runtime": "PowerShell 7 / pwsh",
   "runner": "windows-latest",
+  "runtime_probe": ["pwsh", "--version"],
   "cases": [
     {
       "id": "POWERSHELL-001",

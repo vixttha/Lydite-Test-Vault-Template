@@ -3,6 +3,7 @@
   "language": "TypeScript",
   "runtime": "Node.js 24 / node:test with type stripping",
   "runner": "ubuntu-24.04",
+  "runtime_probe": ["node", "--version"],
   "cases": [
     {
       "id": "TYPESCRIPT-001",

@@ -3,6 +3,7 @@
   "language": "Go",
   "runtime": "Go 1.25.5 / go test",
   "runner": "ubuntu-24.04",
+  "runtime_probe": ["go", "version"],
   "cases": [
     {
       "id": "GO-001",
