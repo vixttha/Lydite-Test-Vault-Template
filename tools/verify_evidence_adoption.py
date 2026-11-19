@@ -59,6 +59,18 @@ def test_receipts(project, env, command, directory, observation):
     observation.write_bytes(old_observation)
     print("Rejected missing and duplicate receipts, duplicate JSON keys, and changed observation bytes.")
 
+    duplicate_observation = b'{"unit_cents":120,"\\u0075nit_cents":125,"quantity":3,"total_cents":375}'
+    observation.write_bytes(duplicate_observation)
+    run([sys.executable, str(EXAMPLE / "check.py")], project, result=1,
+        includes="duplicate JSON key: unit_cents", env=quiet_env)
+    failed_receipt = json.loads(python.read_bytes())
+    if failed_receipt["status"] != "fail" or failed_receipt["evidence_sha256"] != hashlib.sha256(duplicate_observation).hexdigest():
+        raise AssertionError("duplicate observation must retain its original digest and failing status")
+    run(command, project, result=1, includes="| python-check | FAIL |", env=quiet_env)
+    observation.write_bytes(old_observation)
+    python.write_bytes(original[python])
+    print("Verified duplicate observation rejection and failing shared evidence receipt.")
+
     variant = observation.with_name("plan-variant.json")
     plan = json.loads((project / EXAMPLE / "case.json").read_bytes())
     write_json(variant, {**plan, "required_checks": ["python-check"]})
