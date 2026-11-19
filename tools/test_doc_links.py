@@ -17,3 +17,8 @@ class MarkdownNavigationTests(unittest.TestCase):
         self.assertEqual(self.targets(chr(96) + "[Example](missing.md)" + chr(96)
                                       + " ![](decoration.png) [Real](guide.md)\n"),
                          [(1, "decoration.png"), (1, "guide.md")])
+
+    def test_html_comments_hide_only_their_own_links(self):
+        self.assertEqual(self.targets("[Left](left.md) <!-- [Ignored](retired.md) --> [Right](right.md)\n"
+                                      "\n<!--\n[Hidden](retired.md)\n-->\n\n[Visible](visible.md)\n"),
+                         [(1, "left.md"), (1, "right.md"), (7, "visible.md")])
