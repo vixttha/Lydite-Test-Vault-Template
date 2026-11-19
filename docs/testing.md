@@ -43,3 +43,7 @@ The copied [v0.0.3 starter](../starter/test-vault/README.md) remains available f
 - **Named release candidate.** Manually run **Lydite validation** on the intended ref with `release_version` in `vMAJOR.MINOR.PATCH` form. The workflow checks GitHub release and tag state before testing and again before writing `lydite-release-candidate-attempt-*`. A published version or tag pointing to a different commit is rejected. The receipt records the target and pending owner decision.
 
 Read `receipt.json` in the relevant artifact and match its checkout and tree to the review target. Routine runs supersede older routine runs on the same ref. A named run is grouped by ref and version, so repeating that pair supersedes the earlier run for that pair.
+
+## Check maintained documentation
+
+Install the pinned parser with `python3 -m pip install --require-hashes -r tools/markdown-requirements.txt`. Run `python3 tools/check_doc_links.py` from the project checkout.

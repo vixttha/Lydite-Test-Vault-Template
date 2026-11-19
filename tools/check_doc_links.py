@@ -1,29 +1,13 @@
-"""Check inline relative links in the maintained standalone documentation."""
+"""Check rendered relative links in maintained standalone documentation."""
 
 import re
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
+from markdown_docs import MARKDOWN, link_targets
+
 
 ROOT = Path(__file__).resolve().parents[1]
-LINK = re.compile(r"\[[^\]\n]+\]\(([^()\s]+)\)")
-
-
-def links(path):
-    text = path.read_text(encoding="utf-8")
-    fenced = None
-    for line in text.splitlines():
-        if match := re.match(r"^ {0,3}(`{3,}|~{3,})(.*)$", line):
-            marker, rest = match.groups()
-            if fenced is None and (marker[0] != chr(96) or chr(96) not in rest):
-                fenced = marker
-            elif fenced and fenced[0] == marker[0] and len(marker) >= len(fenced) and not rest.strip():
-                fenced = None
-            continue
-        if fenced is None:
-            yield from LINK.findall(line)
-
-
 def anchors(path):
     for line in path.read_text(encoding="utf-8").splitlines():
         if heading := re.match(r"^#{1,6} (.+?)\s*#*\s*$", line):
@@ -44,15 +28,17 @@ def main():
     maintained = maintained_paths(ROOT, ROOT.rglob("*.md"))
     issues = []
     for path in sorted(maintained):
-        for raw in links(path):
+        for line, raw in link_targets(MARKDOWN.parse(path.read_text(encoding="utf-8"))):
             link = urlsplit(raw)
             if link.scheme or link.netloc:
                 continue
-            target = (path.parent / unquote(link.path)).resolve() if link.path else path
+            decoded = unquote(link.path)
+            parent = ROOT if decoded.startswith("/") else path.parent
+            target = (parent / decoded.lstrip("/")).resolve() if decoded else path
             if not target.is_relative_to(ROOT) or not target.exists():
-                issues.append(f"{path.relative_to(ROOT)}: {raw} has no destination")
+                issues.append(f"{path.relative_to(ROOT)}:{line}: {raw} has no destination")
             elif link.fragment and target.suffix == ".md" and unquote(link.fragment) not in anchors(target):
-                issues.append(f"{path.relative_to(ROOT)}: {raw} has no matching heading")
+                issues.append(f"{path.relative_to(ROOT)}:{line}: {raw} has no matching heading")
     if issues:
         raise SystemExit("\n".join(issues))
     print(f"Verified relative links in {len(maintained)} maintained Markdown files.")
