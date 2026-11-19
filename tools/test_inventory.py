@@ -285,6 +285,43 @@ class NativeOutcomeTests(unittest.TestCase):
                 with self.subTest(name=name):
                     self.assertEqual(execute_case({**case, "native_test": name}, directory, os.environ)[0], expected)
 
+    @unittest.skipUnless(shutil.which("node"), "Node is needed for the manifest CLI fixture")
+    def test_node_manifest_cli_preserves_whitespace_only_selectors(self):
+        source = Path(__file__).resolve().parents[1]
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            language = root / "languages/javascript"
+            shutil.copytree(source / "languages/javascript", language)
+            (root / "tools").mkdir()
+            for name in ("inventory.py", "native_outcomes.py", "node_outcomes.mjs"):
+                shutil.copy2(source / "tools" / name, root / "tools" / name)
+            meta = language / "metadata.json"
+            manifest = json.loads(meta.read_text(encoding="utf-8"))
+            case = manifest["cases"][0]
+            fixture = language / case["test"]
+            cli = [sys.executable, "tools/inventory.py", "--run", "javascript"]
+            for test, selector, expected in (
+                ("test('   ', () => {});", "   ", "PASS"),
+                ("test('   ', () => {});", "  ", "FAIL"),
+                ("describe('  ', () => test('   ', () => {}));", ["  ", "   "], "PASS"),
+                ("describe('  ', () => test('   ', () => {}));", [" ", "   "], "FAIL"),
+                ("test('   ', () => {});", "", "invalid"),
+                ("test('   ', () => {});", ["", "   "], "invalid"),
+                ("test('   ', () => {});", [123, "   "], "invalid"),
+            ):
+                with self.subTest(selector=selector):
+                    fixture.write_text("import {test, describe} from 'node:test';\n" + test + "\n",
+                                       encoding="utf-8")
+                    case["native_test"] = selector
+                    meta.write_text(json.dumps(manifest), encoding="utf-8")
+                    result = subprocess.run(cli, cwd=root, capture_output=True, text=True, timeout=20,
+                                            env={**os.environ, "GITHUB_ACTIONS": "false"})
+                    self.assertEqual(result.returncode, 0 if expected == "PASS" else 1)
+                    if expected == "invalid":
+                        self.assertIn("requires a named native_test", result.stderr)
+                    else:
+                        self.assertIn(f"{case['id']} | {expected} |", result.stdout)
+
     def test_unittest_wrapper_preserves_isolated_imports(self):
         with TemporaryDirectory() as directory, redirect_stdout(io.StringIO()):
             test = Path(directory) / "isolated_fixture.py"

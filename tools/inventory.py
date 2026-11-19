@@ -93,6 +93,11 @@ def nonblank(value):
     return isinstance(value, str) and bool(value.strip()) and "\x00" not in value
 
 
+def valid_node_selector(selector):
+    names = selector if isinstance(selector, list) else [selector]
+    return bool(names) and all(isinstance(name, str) and bool(name) and "\\x00" not in name for name in names)
+
+
 def argument_list(value):
     return (
         isinstance(value, list) and bool(value) and nonblank(value[0])
@@ -211,11 +216,8 @@ def read_manifest(folder, seen):
             native = case["native_runner"]
             if not nonblank(native) or native not in NATIVE_RUNNERS:
                 raise ValueError(f"{case_id}: unknown native_runner {native!r}")
-        if "native_runner" in case:
-            name = case.get("native_test")
-            node_path = (native == "node-tap" and isinstance(name, list)
-                         and bool(name) and all(nonblank(part) for part in name))
-            if not (nonblank(name) or node_path):
+            validate_name = valid_node_selector if native == "node-tap" else nonblank
+            if not validate_name(case.get("native_test")):
                 raise ValueError(f"{case_id}: native_runner requires a named native_test")
         if "native_test" in case and "native_runner" not in case:
             raise ValueError(f"{case_id}: native_test requires a native_runner")
