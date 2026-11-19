@@ -16,7 +16,7 @@ from inventory import check_windows_paths, checkout_identity, execute_case, prin
 from native_outcomes import passed_tests
 from validation_contract import lane_failure, validate_inventory
 from release_record import (
-    CandidateRejected, SUPPORTING_JOBS, github_resource, main as record_release, receipt_context,
+    CandidateRejected, SUPPORTING_JOBS, fetch_support, github_resource, main as record_release, receipt_context,
     run_preflight, supporting_evidence, verify_candidate_target,
 )
 
@@ -716,6 +716,24 @@ class ReleaseEvidenceTests(unittest.TestCase):
         self.assertEqual(context["publication_state"], "awaiting-owner-approval")
         with self.assertRaisesRegex(ValueError, "vMAJOR.MINOR.PATCH"):
             receipt_context("workflow_dispatch", "main")
+
+    def test_paginated_lookup_reads_current_attempt_and_reports_missing(self):
+        jobs = [{"name": name, "id": index, "run_id": 1, "run_attempt": 26, "conclusion": "success"}
+                for index, (name, _) in enumerate(SUPPORTING_JOBS, 1)]
+        current = [{"name": f"{prefix}-attempt-26", "id": index, "expired": False,
+                    "expires_at": "2026-12-19T00:00:00Z", "digest": "sha256:fixture"}
+                   for index, (_, prefix) in enumerate(SUPPORTING_JOBS, 1) if prefix]
+        previous = [{"name": f"prior-{index}", "id": index + 100, "expired": False} for index in range(100)]
+        def response(args, text):
+            self.assertIn("--paginate", args)
+            if "/jobs?" in args[-1]:
+                return json.dumps({"jobs": jobs})
+            return json.dumps({"artifacts": previous}) + "\n" + json.dumps({"artifacts": current})
+        with patch("release_record.subprocess.check_output", side_effect=response), patch("release_record.time.sleep"):
+            self.assertEqual(len(fetch_support("example/vault", 1, 26, "url")), len(SUPPORTING_JOBS))
+            current.pop()
+            with self.assertRaisesRegex(ValueError, "unavailable or incomplete"):
+                fetch_support("example/vault", 1, 26, "url")
 
     def test_receipt_requires_a_complete_same_attempt_evidence_set(self):
         attempt, run_id = 2, 123

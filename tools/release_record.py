@@ -51,8 +51,18 @@ def supporting_evidence(jobs, artifacts, run_id, attempt, run_url):
 
 
 def github_items(endpoint, key):
-    data = subprocess.check_output(["gh", "api", endpoint], text=True)
-    return json.loads(data)[key]
+    data = subprocess.check_output(["gh", "api", "--paginate", endpoint], text=True)
+    decoder = json.JSONDecoder()
+    items = []
+    data = data.lstrip()
+    while data:
+        page, offset = decoder.raw_decode(data)
+        values = page.get(key) if isinstance(page, dict) else None
+        if not isinstance(values, list):
+            raise ValueError(f"GitHub returned an invalid {key} page")
+        items.extend(values)
+        data = data[offset:].lstrip()
+    return items
 
 
 def fetch_support(repository, run_id, attempt, run_url):
