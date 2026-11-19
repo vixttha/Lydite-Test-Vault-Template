@@ -162,8 +162,27 @@ class EvidenceResult(unittest.TextTestResult):
         self.passed.add(test)
 
 
+def suite_methods(suite):
+    for item in suite:
+        if isinstance(item, unittest.TestSuite):
+            yield from suite_methods(item)
+        elif isinstance(item, unittest.TestCase):
+            yield item
+
+
 class EvidenceRunner(unittest.TextTestRunner):
     resultclass = EvidenceResult
+
+    def run(self, test):
+        methods = list(suite_methods(test))
+        result = super().run(test)
+        skipped_setups = {item.id() for item, _ in result.skipped}
+        result.setup_skips = {
+            method for method in methods
+            if f"setUpClass ({unittest.util.strclass(type(method))})" in skipped_setups
+            or f"setUpModule ({type(method).__module__})" in skipped_setups
+        }
+        return result
 
 
 if __name__ == "__main__":
@@ -174,7 +193,8 @@ if __name__ == "__main__":
     )
     result = program.result
     passed = [entry for test in result.passed if (entry := unittest_identity(test))]
-    skipped = {getattr(test, "test_case", test) for test, _ in result.skipped} - result.passed
+    skipped = {getattr(test, "test_case", test) for test, _ in result.skipped}
+    skipped = (skipped | result.setup_skips) - result.passed
     skipped = [entry for test in skipped if (entry := unittest_identity(test))]
     print(UNITTEST_RESULT + json.dumps({
         "passed": len(result.passed), "skipped": len(result.skipped),

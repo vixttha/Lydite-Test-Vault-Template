@@ -306,6 +306,21 @@ class NativeOutcomeTests(unittest.TestCase):
                     "commands": [[sys.executable, "-m", "unittest", "fixture"]]}
             self.assertEqual(execute_case(case, directory, os.environ)[0], "SKIP")
 
+    def test_named_unittest_matches_class_setup_skip_to_loaded_methods(self):
+        with TemporaryDirectory() as directory, redirect_stdout(io.StringIO()):
+            test = Path(directory) / "fixture.py"
+            test.write_text(
+                "import unittest\nclass Tests(unittest.TestCase):\n"
+                "    @classmethod\n"
+                "    def setUpClass(cls): raise unittest.SkipTest('optional')\n"
+                "    def test_selected(self): pass\n"
+                "    def test_unselected(self): pass\n"
+            )
+            case = {"native_runner": "unittest", "test": test.name,
+                    "commands": [[sys.executable, "-m", "unittest", "fixture.Tests.test_selected"]]}
+            for name, expected in (("Tests.test_selected", "SKIP"), ("Tests.test_unselected", "FAIL")):
+                self.assertEqual(execute_case({**case, "native_test": name}, directory, os.environ)[0], expected)
+
     def test_named_unittest_must_run_from_the_declared_file(self):
         with TemporaryDirectory() as directory, redirect_stdout(io.StringIO()):
             folder = Path(directory)
