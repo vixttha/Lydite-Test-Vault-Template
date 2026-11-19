@@ -58,7 +58,9 @@ def verify(output, work):
         if any(not case["observed_runtime"] for case in report["cases"]):
             raise AssertionError(f"{name}: runtime reporting is missing")
 
-    check("pass", commit(project, "Exercise the consumer implementation"), {"PYTHON-001": "PASS"}, 0)
+    checkout = commit(project, "Exercise the consumer implementation")
+    check("pass", checkout, {"PYTHON-001": "PASS"}, 0)
+    check("pass", checkout, {"PYTHON-001": "PASS"}, 0)
 
     original_app = app.read_text(encoding="utf-8")
     run(inventory, project, includes="1 declared cases", env=env)
