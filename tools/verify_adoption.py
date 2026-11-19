@@ -73,7 +73,9 @@ def check_project(sample, target):
 
 
 def copy_and_check(sample, target):
-    shutil.copytree(STARTER, target)
+    shutil.copytree(STARTER, target, ignore=shutil.ignore_patterns("__pycache__"))
+    if (target / "test-vault/LICENSE").read_bytes() != (ROOT / "LICENSE").read_bytes():
+        raise RuntimeError("The copied starter is missing the project MIT notice")
     run(["git", "init", "-q", "-b", "trunk"], target)
     run(["git", "add", "."], target)
     run(["git", "-c", "user.name=Test Vault Fixture", "-c", "user.email=fixture@example.invalid",

@@ -4,8 +4,9 @@ The Test Vault tracks what a project intends to test and the evidence for cases 
 
 ## Install in an existing repository
 
-From the source kit's `starter/` directory, copy both `test-vault/` and `.github/workflows/test-vault.yml` into the same paths in your target repository. Review any filename collisions before copying. The five base files provide catalog validation:
+From the source kit's `starter/` directory, copy both `test-vault/` and `.github/workflows/test-vault.yml` into the same paths in your target repository. Review any filename collisions before copying. Keep the included MIT notice with the copied kit. The base install contains:
 
+- [`test-vault/LICENSE`](LICENSE)
 - `test-vault/README.md`
 - `test-vault/cases.md`
 - `test-vault/validate_catalog.py`
