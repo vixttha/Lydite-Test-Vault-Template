@@ -29,8 +29,6 @@ Add `--evidence path/to/report.json` to write one record per selected case. Choo
 
 Every manifest case binds its outcome to its primary `test` file. Native runners require `native_test` with the expected native name. Python `unittest` uses a qualified class and method name and verifies the reported method's source file. Node and Go run the declared file explicitly. Rust verifies the compiler input and the resulting case-local binary. A suite-wide pass cannot replace a missing named result.
 
-A normal workflow run publishes `lydite-validation-attempt-*` with the event, checkout, pull request revisions when applicable, and supporting evidence from the same attempt. For a named candidate, manually run **Lydite validation** on the intended ref and enter `release_version` in `vMAJOR.MINOR.PATCH` form. The resulting candidate receipt names the version and records the pending owner decision. The workflow only writes evidence.
-
 For a standalone assertion, point a supported interpreter directly at the primary file, or build the declared C++ or C# source and immediately run the resulting case-local artifact. C# projects explicitly include the primary source. Set the optional zero-based `assertion_command_index` to identify an assertion stage before post-processing. See the language manifests for supported invocation shapes.
 
 For a case with a `native_runner`, the final command supplies the native verdict by default. Set the optional zero-based `native_command_index` when build, test and post-processing commands appear in the same case and the test command is earlier. Every command must still complete successfully.
@@ -38,3 +36,10 @@ For a case with a `native_runner`, the final command supplies the native verdict
 Run `python tools/inventory.py --run <language-folder>` with the runtime listed in that folder's metadata. The arguments run from the language folder. A `{tmp}` argument is replaced with a fresh temporary directory. Lydite's CI executes the examples on standard public GitHub-hosted Ubuntu and Windows runners and records the exact checkout and result for each case.
 
 The copied [v0.0.3 starter](../starter/test-vault/README.md) remains available for adopters who only need a catalog and optional receipts. The legacy Graphify maps under [Graphify HQ](../Graphify%20HQ/README.md) describe the archived template versions. The [archive manifest](../versions/manifest.json) pins the source. On Ubuntu with Python 3.12, install `tools/graphify/requirements.txt` and run `PYTHONHASHSEED=0 python tools/graphify/version_maps.py "$(mktemp -d)" --fetch-upstream --check` to fetch the three public source commits and compare freshly rebuilt maps with the committed snapshots.
+
+## Validation and release receipts
+
+- **Routine validation.** Pushes, pull requests, and manual runs with a blank version publish `lydite-validation-attempt-*` with the tested checkout, event, pull request revisions when applicable, and same-attempt evidence.
+- **Named release candidate.** Manually run **Lydite validation** on the intended ref with `release_version` in `vMAJOR.MINOR.PATCH` form. The workflow checks GitHub release and tag state before testing and again before writing `lydite-release-candidate-attempt-*`. A published version or tag pointing to a different commit is rejected. The receipt records the target and pending owner decision.
+
+Read `receipt.json` in the relevant artifact and match its checkout and tree to the review target. Routine runs supersede older routine runs on the same ref. A named run is grouped by ref and version, so repeating that pair supersedes the earlier run for that pair.

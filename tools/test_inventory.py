@@ -9,10 +9,14 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 from tempfile import TemporaryDirectory
+from urllib.error import HTTPError
 
 from inventory import checkout_identity, execute_case, print_inventory, read_inventory, report_destination, run_cases, runtime_version
 from native_outcomes import passed_tests
-from release_record import SUPPORTING_JOBS, receipt_context, supporting_evidence
+from release_record import (
+    SUPPORTING_JOBS, github_resource, main as record_release, receipt_context,
+    supporting_evidence, verify_candidate_target,
+)
 
 
 class InventoryTests(unittest.TestCase):
@@ -398,6 +402,85 @@ class CheckoutIdentityTests(unittest.TestCase):
 
 
 class ReleaseEvidenceTests(unittest.TestCase):
+    def test_github_state_treats_only_expected_not_found_as_missing(self):
+        for status in (403, 404, 429, 503):
+            with self.subTest(status=status), patch.dict(os.environ, {"GITHUB_API_URL": "https://example.invalid"}):
+                failure = HTTPError("https://example.invalid", status, "fixture", {}, None)
+                with patch("release_record.urlopen", side_effect=failure):
+                    if status == 404:
+                        self.assertIsNone(github_resource("tag", allow_missing=True))
+                    else:
+                        with self.assertRaisesRegex(ValueError, f"HTTP {status}"):
+                            github_resource("tag", allow_missing=True)
+                if status == 404:
+                    with patch("release_record.urlopen", side_effect=failure):
+                        with self.assertRaisesRegex(ValueError, "HTTP 404"):
+                            github_resource("required commit")
+
+    def test_fresh_candidate_requires_a_visible_checkout(self):
+        checkout = "a" * 40
+        with patch("release_record.github_resource", side_effect=[None, None, {"sha": checkout}]) as read:
+            verify_candidate_target("example/vault", "v1.2.3", checkout)
+        self.assertEqual([call.args[0] for call in read.call_args_list], [
+            "repos/example/vault/releases/tags/v1.2.3", "repos/example/vault/git/ref/tags/v1.2.3",
+            f"repos/example/vault/git/commits/{checkout}",
+        ])
+        with patch("release_record.github_resource", side_effect=[None, None, {"sha": "b" * 40}]):
+            with self.assertRaisesRegex(ValueError, "wrong object"):
+                verify_candidate_target("example/vault", "v1.2.3", checkout)
+
+    def test_published_release_and_conflicting_tag_are_rejected(self):
+        checkout = "a" * 40
+        with patch("release_record.github_resource", return_value={"tag_name": "v1.2.3", "draft": False}):
+            with self.assertRaisesRegex(ValueError, "already published"):
+                verify_candidate_target("example/vault", "v1.2.3", checkout)
+        ref = {"ref": "refs/tags/v1.2.3", "object": {"type": "commit", "sha": "b" * 40}}
+        with patch("release_record.github_resource", side_effect=[None, ref]):
+            with self.assertRaisesRegex(ValueError, "not the validated checkout"):
+                verify_candidate_target("example/vault", "v1.2.3", checkout)
+
+    def test_matching_unpublished_lightweight_and_annotated_tags_are_accepted(self):
+        checkout = "a" * 40
+        commit = {"type": "commit", "sha": checkout}
+        tag = {"type": "tag", "sha": "b" * 40}
+        draft = {"tag_name": "v1.2.3", "draft": True}
+        for target, remaining in ((commit, []), (tag, [{"object": commit}])):
+            with patch("release_record.github_resource", side_effect=[
+                draft, {"ref": "refs/tags/v1.2.3", "object": target}, *remaining,
+            ]):
+                verify_candidate_target("example/vault", "v1.2.3", checkout)
+        with patch("release_record.github_resource", side_effect=[
+            None, {"ref": "refs/tags/v1.2.3", "object": tag}, {"object": tag},
+        ]):
+            with self.assertRaisesRegex(ValueError, "Could not resolve tag"):
+                verify_candidate_target("example/vault", "v1.2.3", checkout)
+
+    def test_preflight_and_receipt_check_current_release_state(self):
+        checkout = "a" * 40
+        environment = {
+            "GITHUB_SHA": checkout, "GITHUB_REPOSITORY": "example/vault",
+            "GITHUB_EVENT_NAME": "workflow_dispatch", "LYDITE_RELEASE_VERSION": "v1.2.3",
+            "GITHUB_RUN_ID": "123", "GITHUB_RUN_ATTEMPT": "1", "GITHUB_SERVER_URL": "https://example.invalid",
+        }
+        support = [{"artifact": {"expires_at": "2026-12-19T00:00:00Z"}}]
+        with TemporaryDirectory() as folder, patch.dict(os.environ, environment, clear=True), \
+                patch("release_record.git", return_value=checkout), \
+                patch("release_record.fetch_support", return_value=support) as fetch, \
+                patch("release_record.verify_candidate_target") as verify, redirect_stdout(io.StringIO()):
+            with patch.object(sys, "argv", ["release_record.py", "--check-target"]):
+                record_release()
+            verify.assert_called_once_with("example/vault", "v1.2.3", checkout)
+            fetch.assert_not_called()
+            output = Path(folder) / "receipt.json"
+            with patch.object(sys, "argv", ["release_record.py", str(output)]):
+                verify.side_effect = ValueError("v1.2.3 is already published")
+                with self.assertRaisesRegex(SystemExit, "already published"):
+                    record_release()
+                self.assertFalse(output.exists())
+                verify.side_effect = None
+                record_release()
+            self.assertEqual(json.loads(output.read_bytes())["target"], "v1.2.3")
+
     def test_routine_validation_has_no_release_identity(self):
         self.assertEqual(receipt_context("pull_request", pr_head="head", pr_base="base"), {
             "kind": "validation", "event": "pull_request",

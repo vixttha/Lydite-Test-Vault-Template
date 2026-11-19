@@ -15,13 +15,37 @@ permissions:
   contents: read
 
 concurrency:
-  group: lydite-${{ github.ref }}
+  group: >-
+    ${{ github.event_name == 'workflow_dispatch' && inputs.release_version != '' &&
+        format('lydite-candidate:{0}:{1}', github.ref, inputs.release_version) ||
+        format('lydite-validation:{0}', github.ref) }}
   cancel-in-progress: true
 
 jobs:
+  candidate-preflight:
+    name: Check named release target
+    if: github.event.repository.private == false && github.event_name == 'workflow_dispatch' && inputs.release_version != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+      - name: Check GitHub release and tag state
+        env:
+          LYDITE_RELEASE_VERSION: ${{ inputs.release_version }}
+          GH_TOKEN: ${{ github.token }}
+        run: python tools/release_record.py --check-target
+
   inventory-and-adoption:
     name: Inventory and starter adoption
-    if: github.event.repository.private == false
+    needs: candidate-preflight
+    if: >-
+      !cancelled() && github.event.repository.private == false &&
+      (needs.candidate-preflight.result == 'success' || needs.candidate-preflight.result == 'skipped')
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
@@ -64,7 +88,10 @@ jobs:
 
   examples:
     name: Language examples (${{ matrix.runner }})
-    if: github.event.repository.private == false
+    needs: candidate-preflight
+    if: >-
+      !cancelled() && github.event.repository.private == false &&
+      (needs.candidate-preflight.result == 'success' || needs.candidate-preflight.result == 'skipped')
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 15
     strategy:
@@ -136,7 +163,10 @@ jobs:
 
   graphify:
     name: Rebuild and verify archived Graphify maps
-    if: github.event.repository.private == false
+    needs: candidate-preflight
+    if: >-
+      !cancelled() && github.event.repository.private == false &&
+      (needs.candidate-preflight.result == 'success' || needs.candidate-preflight.result == 'skipped')
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     env:
