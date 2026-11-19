@@ -29,7 +29,11 @@ def main():
     issues = []
     for path in sorted(maintained):
         for line, raw in link_targets(MARKDOWN.parse(path.read_text(encoding="utf-8"))):
-            link = urlsplit(raw)
+            try:
+                link = urlsplit(raw)
+            except ValueError as error:
+                issues.append(f"{path.relative_to(ROOT)}:{line}: {raw!r} is invalid: {error}")
+                continue
             if link.scheme or link.netloc:
                 continue
             decoded = unquote(link.path)
