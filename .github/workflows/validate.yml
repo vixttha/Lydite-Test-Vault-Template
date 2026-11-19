@@ -215,8 +215,12 @@ jobs:
 
   validation-receipt:
     name: Record checkout and validation evidence
-    if: github.event.repository.private == false
     needs: [inventory-and-adoption, examples, graphify]
+    # A skipped named-only preflight is expected for routine validation.
+    if: >-
+      !cancelled() && github.event.repository.private == false &&
+      needs.inventory-and-adoption.result == 'success' &&
+      needs.examples.result == 'success' && needs.graphify.result == 'success'
     permissions:
       actions: read
       contents: read
