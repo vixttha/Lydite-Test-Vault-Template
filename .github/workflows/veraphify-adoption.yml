@@ -1,0 +1,25 @@
+name: Veraphify v0.0.9 adoption
+
+on:
+  push:
+    branches: ["main", "chore/veraphify-v0.0.9"]
+    paths:
+      - ".github/workflows/veraphify-adoption.yml"
+      - "Graphify HQ/README.md"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/veraphify-adoption.yml"
+      - "Graphify HQ/README.md"
+
+permissions:
+  contents: read
+
+jobs:
+  adoption:
+    if: github.event.repository.private == false
+    uses: vixttha/Veraphify/.github/workflows/verify-adopter-v0.0.9.yml@156331636fab4fafdd4ca8d05c5047cb14e5385e
+    with:
+      source_sha: "87d25d80d3154d295052412b64b29a0f0f152c27"
+      source_file: "tools/inventory.py"
+      source_anchor: "def read_inventory("
