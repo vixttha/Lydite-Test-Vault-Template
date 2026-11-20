@@ -1,0 +1,38 @@
+name: Provenistem library
+
+on:
+  pull_request:
+    paths:
+      - 'provenistem/**'
+      - '.github/workflows/provenistem.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'provenistem/**'
+      - '.github/workflows/provenistem.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Provenistem records (${{ matrix.runner }})
+    if: github.event.repository.private == false
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, windows-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: '3.12'
+      - name: Check the populated library
+        run: |
+          git rev-parse HEAD
+          python provenistem/tools/library.py check

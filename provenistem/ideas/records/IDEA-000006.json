@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "id": "IDEA-000006",
+  "title": "Keep the candidate changelog in sync with merged checkpoints",
+  "summary": "Prepare release notes from the combined reviewed commit, including the current numbered checkpoint range and its exact public CI evidence.",
+  "kind": "process",
+  "origin": {
+    "created_by": "imported",
+    "source": "https://github.com/vixttha/Lydite-Test-Vault-Template/issues/33"
+  },
+  "lifecycle_status": "adopted",
+  "implementation_status": "implemented",
+  "testing": {
+    "status": "untested"
+  },
+  "importance": "medium",
+  "complexity": "low",
+  "categories": [
+    "release",
+    "documentation"
+  ],
+  "benefits": [
+    "Gives reviewers a reliable scope and evidence map"
+  ],
+  "risks": [
+    "A draft summary can become stale as stacked work lands"
+  ],
+  "related_ideas": [],
+  "evidence": [
+    {
+      "relation": "context",
+      "claim": "Before the v0.0.4 release: The candidate document still names the first fifteen checkpoints.",
+      "repository": "vixttha/Lydite-Test-Vault-Template",
+      "commit": "c5b02ca5a18df5a9fc3094b7f566d3c8db995408",
+      "path": "docs/release-candidate.md"
+    },
+    {
+      "relation": "supports",
+      "claim": "The reconciled changelog covers v0.0.3.1 through v0.0.3.30, and the published release links the exact-commit run and release receipt.",
+      "repository": "vixttha/Lydite-Test-Vault-Template",
+      "commit": "87d25d80d3154d295052412b64b29a0f0f152c27",
+      "path": "docs/release-candidate.md"
+    }
+  ],
+  "decision": {
+    "decided_by": "owner",
+    "decided_at": "2026-11-19T10:42:14Z",
+    "reason": "Included in the owner-approved publication of Lydite v0.0.4. https://github.com/vixttha/Lydite-Test-Vault-Template/releases/tag/v0.0.4"
+  }
+}

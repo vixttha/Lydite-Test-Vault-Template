@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "id": "IDEA-000001",
+  "title": "Bind each case verdict to the declared native test",
+  "summary": "Make passing assertion evidence specific to the case that requested it. A selected unrelated test must never earn a pass for the declared case.",
+  "kind": "architecture",
+  "origin": {
+    "created_by": "imported",
+    "source": "https://github.com/vixttha/Lydite-Test-Vault-Template/issues/18"
+  },
+  "lifecycle_status": "adopted",
+  "implementation_status": "implemented",
+  "testing": {
+    "status": "tested",
+    "outcome": "pass",
+    "refs": [
+      "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44506598515/job/135499713793",
+      "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44506598515/job/135499713889",
+      "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44506598515/job/135499713814"
+    ]
+  },
+  "importance": "high",
+  "complexity": "high",
+  "categories": [
+    "native-testing",
+    "evidence"
+  ],
+  "benefits": [
+    "Prevents misleading green results in consumer projects"
+  ],
+  "risks": [
+    "Indicators and selectors differ by native framework"
+  ],
+  "related_ideas": [],
+  "evidence": [
+    {
+      "relation": "context",
+      "claim": "Before the v0.0.4 release: The current runner can accept the native outcome without tying it to the declared test.",
+      "repository": "vixttha/Lydite-Test-Vault-Template",
+      "commit": "c5b02ca5a18df5a9fc3094b7f566d3c8db995408",
+      "path": "tools/inventory.py"
+    },
+    {
+      "relation": "supports",
+      "claim": "v0.0.4 binds a case verdict to its declared native test using named native outcomes or a verified direct or build-and-run test stage.",
+      "repository": "vixttha/Lydite-Test-Vault-Template",
+      "commit": "87d25d80d3154d295052412b64b29a0f0f152c27",
+      "path": "tools/inventory.py"
+    }
+  ],
+  "decision": {
+    "decided_by": "owner",
+    "decided_at": "2026-11-19T10:42:14Z",
+    "reason": "Included in the owner-approved publication of Lydite v0.0.4. https://github.com/vixttha/Lydite-Test-Vault-Template/releases/tag/v0.0.4"
+  }
+}

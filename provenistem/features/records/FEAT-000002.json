@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "id": "FEAT-000002",
+  "title": "Per-case command outcomes and evidence",
+  "summary": "v0.0.4 records the declared commands, executed and unstarted stages, observed runtime and outcomes for each case, and checks the checkout identity.",
+  "kind": "capability",
+  "lifecycle_status": "verified",
+  "implementation_status": "implemented",
+  "idea_ids": [],
+  "acceptance_criteria": [
+    "Keep the planned list and record executed and unstarted stages",
+    "Inspect the downloadable passing and nonpassing rehearsal receipts"
+  ],
+  "testing": {
+    "status": "tested",
+    "outcome": "pass",
+    "refs": [
+      "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44506598515/job/135499713889",
+      "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44506598515/job/135499713814"
+    ]
+  },
+  "evidence": [
+    {
+      "kind": "test",
+      "claim": "The public language jobs passed and uploaded machine-readable per-case evidence for the released checkout.",
+      "source_sha": "87d25d80d3154d295052412b64b29a0f0f152c27",
+      "source_path": "tools/inventory.py",
+      "receipt": "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44506598515/job/135499713889"
+    }
+  ],
+  "release_membership": "NOT_ASSERTED"
+}
