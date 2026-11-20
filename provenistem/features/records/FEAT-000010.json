@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "id": "FEAT-000010",
+  "title": "Branchwell plan and declaration validation",
+  "summary": "The dedicated branch checks that the Branchwell plan exists and that Lydite declarations pass inventory validation. The workflow prints the Lydite checkout and reports consumer case execution as pending.",
+  "kind": "workflow",
+  "lifecycle_status": "verified",
+  "implementation_status": "implemented",
+  "idea_ids": [
+    "IDEA-000008"
+  ],
+  "acceptance_criteria": [
+    "Run the plan and inventory checks on public Ubuntu.",
+    "State in the result that Branchwell case execution needs consumer evidence."
+  ],
+  "testing": {
+    "status": "tested",
+    "outcome": "pass",
+    "refs": [
+      "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44540376306/job/135616771475"
+    ]
+  },
+  "evidence": [
+    {
+      "kind": "test",
+      "claim": "The hosted validation passed the plan and inventory step at the recorded branch tip.",
+      "source_sha": "46b63f7e0db3b56ed80cf3bbd76ce7511f25fa53",
+      "source_path": ".github/workflows/branchwell-adoption.yml",
+      "receipt": "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44540376306/job/135616771475"
+    }
+  ],
+  "release_membership": "NOT_ASSERTED"
+}

@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "id": "FEAT-000011",
+  "title": "Hosted controls for blocked and failed evidence",
+  "summary": "A dedicated audit workflow exercises the v0.0.4.72 source at a fixed checkout. It checks early-lane evidence and a real mix of passing, failing and blocked case outcomes on Ubuntu and Windows. The Ubuntu lane also checks named-target preflight behavior.",
+  "kind": "workflow",
+  "lifecycle_status": "verified",
+  "implementation_status": "implemented",
+  "idea_ids": [
+    "IDEA-000009"
+  ],
+  "acceptance_criteria": [
+    "Early setup and inventory failures report the failed stage and unstarted cases on both public runners.",
+    "A failing adoption case is retained alongside passing and blocked outcomes.",
+    "The Ubuntu control accepts an available target and rejects the already published v0.0.4 target."
+  ],
+  "testing": {
+    "status": "tested",
+    "outcome": "pass",
+    "refs": [
+      "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44541320301/job/135620108708",
+      "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44541320301/job/135620107953"
+    ]
+  },
+  "evidence": [
+    {
+      "kind": "test",
+      "claim": "Ubuntu passed the early-failure and case-result controls, plus the public target preflight.",
+      "source_sha": "e8cbd34aab3abb6f90565d5fc7812c8ef736458b",
+      "source_path": ".github/workflows/checkpoint-runner-controls.yml",
+      "receipt": "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44541320301/job/135620108708"
+    },
+    {
+      "kind": "test",
+      "claim": "Windows passed the early-failure and case-result controls using Git Bash.",
+      "source_sha": "e8cbd34aab3abb6f90565d5fc7812c8ef736458b",
+      "source_path": ".github/workflows/checkpoint-runner-controls.yml",
+      "receipt": "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44541320301/job/135620107953"
+    }
+  ],
+  "release_membership": "NOT_ASSERTED"
+}

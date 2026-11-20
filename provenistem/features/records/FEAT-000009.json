@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "id": "FEAT-000009",
+  "title": "Pinned Veraphify adoption verification",
+  "summary": "Lydite main runs a public Ubuntu adoption check that builds a Graphify map, verifies a Veraphify archive and checks a source citation against the separately pinned Lydite v0.0.4 source. This integration landed on main after the published Lydite tag.",
+  "kind": "integration",
+  "lifecycle_status": "verified",
+  "implementation_status": "implemented",
+  "idea_ids": [],
+  "acceptance_criteria": [
+    "Build and verify the archive using independently pinned Lydite, Veraphify and Graphify producer revisions.",
+    "Verify the archive digest and the inventory source citation, and retain a run-attempt receipt."
+  ],
+  "testing": {
+    "status": "tested",
+    "outcome": "pass",
+    "refs": [
+      "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44668227394/job/136062665350"
+    ]
+  },
+  "evidence": [
+    {
+      "kind": "test",
+      "claim": "The main push verified the archive and tools/inventory.py:212 against the Lydite release SHA.",
+      "source_sha": "d43a6a9c75f818a53241d31445b978faeb1503cd",
+      "source_path": ".github/workflows/veraphify-adoption.yml",
+      "receipt": "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44668227394/job/136062665350"
+    }
+  ],
+  "release_membership": "NOT_ASSERTED"
+}

@@ -11,3 +11,8 @@
 | FEAT-000005 | Shared check-plan identity | verified | implemented |
 | FEAT-000006 | Fixture directory confinement | verified | implemented |
 | FEAT-000007 | Strict shared observation decoding | verified | implemented |
+| FEAT-000008 | Shared branch-first installation for humans and agents | proposed | not\_planned |
+| FEAT-000009 | Pinned Veraphify adoption verification | verified | implemented |
+| FEAT-000010 | Branchwell plan and declaration validation | verified | implemented |
+| FEAT-000011 | Hosted controls for blocked and failed evidence | verified | implemented |
+| FEAT-000012 | Preserve catalog cases after Markdown comments | verified | implemented |

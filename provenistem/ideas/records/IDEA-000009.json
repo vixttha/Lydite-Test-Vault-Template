@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "id": "IDEA-000009",
+  "title": "Refresh candidate evidence when the target branch moves",
+  "summary": "Bind hardening review evidence to the current PR base, head, merge checkout and tree. Recheck the combined Lydite and Veraphify workflows before relying on the candidate for an owner decision.",
+  "kind": "process",
+  "origin": {
+    "created_by": "assistant",
+    "source": "Lydite branch audit and https://github.com/vixttha/Lydite-Test-Vault-Template/issues/118"
+  },
+  "lifecycle_status": "captured",
+  "implementation_status": "not_planned",
+  "testing": {
+    "status": "untested"
+  },
+  "importance": "unknown",
+  "complexity": "unknown",
+  "categories": [
+    "release-review",
+    "validation-evidence"
+  ],
+  "benefits": [
+    "The owner can review evidence for the proposed integration tree."
+  ],
+  "risks": [
+    "Separate greens for the old candidate and later main leave the combined tree unverified.",
+    "A routine run and a named release receipt represent different events in the review."
+  ],
+  "related_ideas": [
+    "IDEA-000006"
+  ],
+  "evidence": [
+    {
+      "relation": "context",
+      "claim": "The candidate review requires the selected release checkout, matching receipt and owner decision.",
+      "repository": "vixttha/Lydite-Test-Vault-Template",
+      "commit": "a19c58a5b005bfab3e60b0b16aae13bf01023118",
+      "path": "docs/release-review.md"
+    }
+  ]
+}

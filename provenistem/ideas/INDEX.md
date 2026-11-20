@@ -10,3 +10,7 @@
 | IDEA-000004 | Reject ambiguous shared JSON observations | adopted | implemented |
 | IDEA-000005 | Check pinned archive file modes | adopted | implemented |
 | IDEA-000006 | Keep the candidate changelog in sync with merged checkpoints | adopted | implemented |
+| IDEA-000007 | Branch-first template installation and output-only publishing | captured | not\_planned |
+| IDEA-000008 | Record Branchwell results by case | captured | not\_planned |
+| IDEA-000009 | Refresh candidate evidence when the target branch moves | captured | not\_planned |
+| IDEA-000010 | Reject duplicate members in Provenistem records | captured | not\_planned |

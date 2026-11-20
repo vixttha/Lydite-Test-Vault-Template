@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "id": "FEAT-000008",
+  "title": "Shared branch-first installation for humans and agents",
+  "summary": "Give maintainers a guided install and give LLM-based agents a machine-readable entry point for installing a reusable template in an existing GitHub project. Both entry points use the same preflight, canonical branch rules, exact source pin, and install receipt. The human interface and agent discovery format remain design decisions.",
+  "kind": "workflow",
+  "lifecycle_status": "proposed",
+  "implementation_status": "not_planned",
+  "idea_ids": [
+    "IDEA-000007"
+  ],
+  "acceptance_criteria": [
+    "The human flow shows the destination repository, pinned template revision, exact branch, and proposed changes for maintainer review before applying an install.",
+    "The agent entry point declares the template identity, pinned revision, canonical branch, and path to the template guidance. The agent verifies the destination and loads the pinned guidance explicitly through its supported host tools. Missing destination access holds the install before any write.",
+    "Both flows run the same read-only preflight for existing Vault paths, legacy refs, case aliases, and conflicting or incomplete discovery. A fresh Lydite install creates and verifies exactly one remote branch named Lydite-Test-Vault before writing the workspace. A repeat install reuses that branch and identical inputs leave it unchanged. A concurrent create is resolved by reading back and verifying the ref.",
+    "Both flows return the same receipt fields for the repository, canonical branch, source commit, destination commit, and outcome. Installation preserves the product default branch and tree. Any subsequent publishing step proposes only approved output paths in a separate reviewable pull request.",
+    "On standard public GitHub-hosted Ubuntu and Windows runners, verify fresh install, identical reinstall, legacy and conflicting refs, concurrent creation, and incomplete discovery using disposable repositories. Demonstrate that both entry points apply the same branch rules and receipt checks."
+  ],
+  "testing": {
+    "status": "untested"
+  },
+  "evidence": [],
+  "release_membership": "NOT_ASSERTED"
+}

@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "id": "FEAT-000012",
+  "title": "Preserve catalog cases after Markdown comments",
+  "summary": "The v0.0.4.75 hardening draft keeps raw HTML markers inside Markdown comments from hiding visible catalog cases that follow. The check ran against the prior integration base recorded in PR #40.",
+  "kind": "capability",
+  "lifecycle_status": "verified",
+  "implementation_status": "implemented",
+  "idea_ids": [],
+  "acceptance_criteria": [
+    "Register both visible tables when the intervening Markdown comment contains a raw HTML marker.",
+    "Keep actual HTML examples and comment-only cases out of the executable inventory."
+  ],
+  "testing": {
+    "status": "tested",
+    "outcome": "pass",
+    "refs": [
+      "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44621585766/job/135904379591"
+    ]
+  },
+  "evidence": [
+    {
+      "kind": "test",
+      "claim": "The inventory and adoption job ran the tooling regression suite on the .75 candidate checkout.",
+      "source_sha": "a19c58a5b005bfab3e60b0b16aae13bf01023118",
+      "source_path": "starter/test-vault/validate_catalog.py",
+      "receipt": "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44621585766/job/135904379591"
+    }
+  ],
+  "release_membership": "NOT_ASSERTED"
+}

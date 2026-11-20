@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "id": "IDEA-000007",
+  "title": "Branch-first template installation and output-only publishing",
+  "summary": "Explore one GitHub product that lets template authors package a reusable workspace, agent guidance, and a publishing contract, and lets project maintainers adopt that package in an existing repository. The package declares its stable template ID, exact permanent branch, pinned source commit, known legacy locations, workspace markers, agent entry point, and approved product outputs. Installation discovers prior work, creates or verifies the exact remote branch before writing the workspace, and updates the verified branch in place. The agent explicitly loads the pinned template guidance and available skills for the task while using the project checkout as its product context. Publishing then starts from the current product default branch and opens a PR containing only the reviewed output paths, with a receipt linking the template, product, and output revisions. A separate repository merge check could enforce the boundary for changes created outside the product. Pilot with `Lydite-Test-Vault` and a README HQ publish case before broadening to Brand Identity, Provenistem, and other branch-installed templates.",
+  "kind": "product",
+  "origin": {
+    "created_by": "joint",
+    "source": "Owner discussion about combining the branch-first installer and output-only publisher and preserving the specialist behavior agents pick up from template guidance. Adoption incident and policy: https://github.com/vixttha/Lydite-Test-Vault-Template/issues/114 and https://github.com/vixttha/Veraphify/issues/69."
+  },
+  "lifecycle_status": "captured",
+  "implementation_status": "not_planned",
+  "testing": {
+    "status": "untested"
+  },
+  "importance": "unknown",
+  "complexity": "unknown",
+  "categories": [
+    "template-adoption",
+    "agent-guidance",
+    "publishing",
+    "github"
+  ],
+  "benefits": [
+    "One workflow can move a project from first install through updates and reviewed publication while each template supplies its own branch and output contract.",
+    "A first install can provision an empty canonical branch and verify it remotely. An identical reinstall can be a no-op. A concurrent create calls for ref readback and ownership verification before any workspace write.",
+    "Adopters can reuse specialist roles, decision criteria, checklists, examples, and supported skills without copying the workspace into product history. A host-specific entry point or an approved discovery link can make that guidance easy to find.",
+    "The publishing review can show which output paths changed and which workspace and product revisions produced them. For example, a README HQ workspace can yield README.md and docs/verification.md while its templates and learning records stay on its branch.",
+    "GitHub and Git can provide the first pilot on standard public Ubuntu and Windows runners. A database-backed portfolio view is an optional follow-up if a demonstrated reporting need justifies it."
+  ],
+  "risks": [
+    "An occupied canonical name, case alias, legacy duplicate, inaccessible ref, or unverified workspace must stop adoption before write. Reconcile a legacy workspace through a reviewed migration and preserve its adopter changes and history.",
+    "An outdated product base or an incorrect output list can publish the wrong files. Recheck the base and the complete PR diff against the reviewed list and keep protected-product merge approval with the maintainer.",
+    "Agent behavior depends on which guidance the host actually loads, the host's instruction precedence, and the available tools. A branch supplies context and procedures. Runtime identity, permissions, and access remain under the host and repository controls. Review pinned guidance before loading it and keep template scripts outside the publish credential's execution context.",
+    "Prove core behavior with first install, repeat install, branch collisions, legacy aliases, concurrent install, changed upstream pins, and a product PR with extra workspace files. Check that product ref and tree remain unchanged by installation and that publishing proposes only declared output paths. A future required merge check would cover manual changes outside the installer and publisher.",
+    "Compare agent runs on the same representative tasks with the template guidance loaded and without it. Record instruction discovery, checklist adherence, output quality, and any attempts to exceed repository scope. A successful checkout alone says nothing about consistency across hosts.",
+    "Treat 99% as a proposed reliability target for eligible operations. Define eligible repositories, permissions, template types, and host configurations before measuring. Report deliberate policy refusals separately from operational failures and require zero unauthorized branch or workspace writes in the acceptance cases."
+  ],
+  "related_ideas": [
+    "IDEA-000002",
+    "IDEA-000005"
+  ],
+  "evidence": [
+    {
+      "relation": "context",
+      "claim": "The original Lydite starter was designed as a copy-in workflow, which motivates a safer first-adoption contract.",
+      "repository": "vixttha/Lydite-Test-Vault-Template",
+      "commit": "87d25d80d3154d295052412b64b29a0f0f152c27",
+      "path": "starter/test-vault/README.md"
+    },
+    {
+      "relation": "context",
+      "claim": "The Veraphify incident had a real runtime dependency on the copied Test Vault inspector. Graphify extracted the direct import from this source, so removing the workspace alone would break startup.",
+      "repository": "vixttha/Veraphify",
+      "commit": "ed5650085e33cf142a37de695757a4df999a7cf3",
+      "path": "veraphifiy.mjs"
+    },
+    {
+      "relation": "derived_from",
+      "claim": "Veraphify PR #55 provides a scoped publishing precedent. Its changes were limited to the product README and this reviewed verification guide.",
+      "repository": "vixttha/Veraphify",
+      "commit": "e42e9ff321432619a6004a59164f51b002ff6055",
+      "path": "docs/verification.md"
+    }
+  ]
+}

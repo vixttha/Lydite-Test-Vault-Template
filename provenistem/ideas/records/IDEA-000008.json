@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "id": "IDEA-000008",
+  "title": "Record Branchwell results by case",
+  "summary": "Use the existing Branchwell plan to bind each executed case to a pinned consumer checkout. Keep the browser check's manual observation distinct from automated outcomes.",
+  "kind": "process",
+  "origin": {
+    "created_by": "assistant",
+    "source": "Lydite branch audit and https://github.com/vixttha/Lydite-Test-Vault-Template/issues/53"
+  },
+  "lifecycle_status": "captured",
+  "implementation_status": "not_planned",
+  "testing": {
+    "status": "untested"
+  },
+  "importance": "unknown",
+  "complexity": "unknown",
+  "categories": [
+    "adopter-evidence",
+    "branchwell"
+  ],
+  "benefits": [
+    "Maintainers can tell which behaviors the Branchwell checkout actually exercised."
+  ],
+  "risks": [
+    "A green Lydite plan job or a generic consumer build cannot establish the five planned case outcomes."
+  ],
+  "related_ideas": [
+    "IDEA-000007"
+  ],
+  "evidence": [
+    {
+      "relation": "context",
+      "claim": "The Lydite plan specifies four automated cases and one manual browser case.",
+      "repository": "vixttha/Lydite-Test-Vault-Template",
+      "commit": "46b63f7e0db3b56ed80cf3bbd76ce7511f25fa53",
+      "path": "docs/branchwell-adoption.md"
+    }
+  ]
+}
