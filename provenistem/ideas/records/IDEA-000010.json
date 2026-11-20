@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "id": "IDEA-000010",
+  "title": "Reject duplicate members in Provenistem records",
+  "summary": "Require one value per JSON member in canonical idea and feature records, including nested decision, testing and evidence objects. Verify that diagnostics identify the record and that valid records still generate their indexes.",
+  "kind": "process",
+  "origin": {
+    "created_by": "assistant",
+    "source": "Lydite branch audit and https://github.com/vixttha/Lydite-Test-Vault-Template/issues/121"
+  },
+  "lifecycle_status": "captured",
+  "implementation_status": "not_planned",
+  "testing": {
+    "status": "untested"
+  },
+  "importance": "unknown",
+  "complexity": "unknown",
+  "categories": [
+    "provenistem",
+    "record-validation"
+  ],
+  "benefits": [
+    "A generated index cannot silently select one of two conflicting lifecycle values."
+  ],
+  "risks": [
+    "The current checker can accept conflicting keys and show only the last value in the generated index."
+  ],
+  "related_ideas": [],
+  "evidence": [
+    {
+      "relation": "context",
+      "claim": "The canonical record loader and index checks are the affected validation surface.",
+      "repository": "vixttha/Lydite-Test-Vault-Template",
+      "commit": "175c1b9bb280d35a64c062a40882e9c44fd5336d",
+      "path": "provenistem/tools/library.py"
+    }
+  ]
+}
