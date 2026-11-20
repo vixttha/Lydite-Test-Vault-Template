@@ -10,3 +10,4 @@
 | IDEA-000004 | Reject ambiguous shared JSON observations | adopted | implemented |
 | IDEA-000005 | Check pinned archive file modes | adopted | implemented |
 | IDEA-000006 | Keep the candidate changelog in sync with merged checkpoints | adopted | implemented |
+| IDEA-000007 | Branch-first template installation and output-only publishing | captured | not\_planned |
