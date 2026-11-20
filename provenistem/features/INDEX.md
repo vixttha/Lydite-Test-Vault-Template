@@ -11,3 +11,4 @@
 | FEAT-000005 | Shared check-plan identity | verified | implemented |
 | FEAT-000006 | Fixture directory confinement | verified | implemented |
 | FEAT-000007 | Strict shared observation decoding | verified | implemented |
+| FEAT-000008 | Shared branch-first installation for humans and agents | proposed | not\_planned |
