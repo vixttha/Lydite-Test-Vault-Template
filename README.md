@@ -14,9 +14,10 @@ This template is the stone; your code is the metal. Instead of relying on "it wo
 - [Install the original copy-in starter](starter/test-vault/README.md) to adopt the catalog and receipt verifier in an existing project.
 - [Read the migration audit](docs/migration-audit.md) for what came from AlderVale and Blender-Agent.
 - [Browse the historical versions](versions/README.md) for the original template snapshots.
-- [Review the standalone release candidate](docs/release-candidate.md) for the draft changelog and validation record.
+- [Find current validation and release receipts](docs/testing.md#validation-and-release-receipts).
+- [Review the published v0.0.4 history](docs/release-candidate.md) for the original changelog and run evidence.
 
-Run `python tools/inventory.py` from the repository root to see each language, runtime, runner, declared case count, and test-file count. The inventory validates the metadata against files on disk. Each case holds its purpose, test path, and command arguments. Language folders include a small runnable example that you can adapt to your own project's entry point.
+Run `python3 tools/inventory.py` from the repository root to see each language, runtime, runner, declared case count, and test-file count. The inventory validates the metadata against files on disk. Each case holds its purpose, test path, and command arguments. Language folders include a small runnable example that you can adapt to your own project's entry point.
 
 A **declared case** is one named behavior in the metadata. Several assertions can belong to one case. A **runner result** records the case outcome for the checkout and environment that actually ran it. See the [test guide](docs/testing.md) for the workflow.
 

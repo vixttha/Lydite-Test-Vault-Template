@@ -20,7 +20,7 @@ Use a receipt when a test suite can record a result for a catalog case. The cata
   "schema_version": 2,
   "case_id": "CLI-001",
   "check_id": "node-test",
-  "checkout_sha": "<actual full 40-character Git SHA>",
+  "checkout_sha": "<actual full Git commit object ID>",
   "run_id": "11223344",
   "attempt": "1",
   "environment": {"os": "Linux", "runtime": "Node.js 24"},
@@ -30,7 +30,7 @@ Use a receipt when a test suite can record a result for a catalog case. The cata
 }
 ```
 
-All fields in the examples are required. Use `null` for `evidence_sha256` when `shared_evidence` is false. Outcomes are `pass`, `fail`, `skip`, or `blocked`. The verifier reads the JSON files in the receipt directory. A missing, duplicate, undeclared, invalid, stale, or nonpassing receipt fails the case. Unknown JSON fields and duplicate JSON keys fail validation. The one combined table is also appended to the GitHub Actions job summary when available.
+All fields in the examples are required. Use the full 40-character SHA-1 or 64-character SHA-256 commit ID for the checkout’s Git object format. Use `null` for `evidence_sha256` when `shared_evidence` is false. Outcomes are `pass`, `fail`, `skip`, or `blocked`. The verifier reads filenames ending in lowercase `.json` on every platform. Rename uppercase extensions such as `.JSON` before upgrading a copied verifier. A missing, duplicate, undeclared, invalid, stale, or nonpassing receipt fails the case. Unknown JSON fields and duplicate JSON keys fail validation. The one combined table is also appended to the GitHub Actions job summary when available.
 
 Each v2 suite hashes the exact manifest bytes it used. Write the plan before running any checks and reuse it unchanged for verification. Changing any manifest bytes, including the required check set, requires new v2 receipts. Observation digests remain separate from plan digests.
 

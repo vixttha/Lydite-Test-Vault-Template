@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from verify_adoption import ACTION, ROOT, STARTER, VALIDATOR, run
+from verify_adoption import ACTION, DIVIDER, HEADER, ROOT, STARTER, VALIDATOR, run
 
 
 CASE_ROW = "| CLI-001 | CLI quote | P0 | Node.js and Python | Three units at 125 cents total 375 cents. |\n"
@@ -44,7 +44,10 @@ def test_receipts(project, env, command, directory, observation):
         run(command, project, result=1, includes=detail, env=quiet_env)
         print(f"Rejected {name}.")
     python.unlink()
-    run(command, project, result=1, includes="MISSING", env=quiet_env)
+    uppercase = directory / "python.JSON"
+    uppercase.write_bytes(original[python])
+    run(command, project, result=1, includes="| python-check | MISSING |", env=quiet_env)
+    uppercase.unlink()
     python.write_bytes(original[python])
     duplicate = directory / "copy.json"
     duplicate.write_bytes(original[python])
@@ -99,25 +102,97 @@ def test_receipts(project, env, command, directory, observation):
     print("Verified exact plan binding, rejection of changed required checks, and matching v1 compatibility.")
 
 
+def verify_missing_helpers(project, work, command, directory, observation, env):
+    quiet_env = {key: value for key, value in env.items() if key != "GITHUB_STEP_SUMMARY"}
+    original = {path.name: json.loads(path.read_bytes()) for path in directory.glob("*.json")}
+    for helper in ("source_commit.py", "validate_catalog.py"):
+        partial = work / helper.removesuffix(".py")
+        run(["git", "clone", "--no-hardlinks", str(project), str(partial)], work)
+        path = "test-vault/" + helper
+        run(["git", "rm", "--cached", "--", path], partial)
+        run(["git", "-c", "user.name=Test Vault Fixture", "-c", "user.email=fixture@example.invalid",
+             "-c", "commit.gpgsign=false", "commit", "-qm", "Leave one copied helper untracked"], partial)
+        checkout = run(["git", "rev-parse", "HEAD"], partial).strip()
+        receipts = partial / "receipts"
+        receipts.mkdir()
+        for name, record in original.items():
+            write_json(receipts / name, {**record, "checkout_sha": checkout})
+        run([*command[:2], "--case", str(EXAMPLE / "case.json"), "--receipts", str(receipts),
+             "--evidence", str(observation)], partial, result=1,
+            includes=f"receipt source must be tracked in the intended Git checkout: {Path(path)}",
+            env=quiet_env)
+        print(f"Rejected untracked receipt helper {helper}.")
+
+
+
+def verify_readme_block(project, work, env):
+    readme = (project / EXAMPLE / "README.md").read_text(encoding="utf-8")
+    block = readme.split("```bash\n", 1)[1].split("```", 1)[0]
+    fixtures = (
+        ("pass", None, None, "Overall: PASS"),
+        ("node-fail", "app.test.mjs", "\ntest('controlled failure', () => assert.fail('regression'));\n",
+         "| node-test | FAIL |"),
+        ("python-fail", "check.py", None, "| python-check | FAIL |"),
+        ("missing", "run-node.mjs", "\nprocess.exit(1);\n", "| node-test | MISSING |"),
+    )
+    for name, filename, change, expected in fixtures:
+        fixture = work / ("example-" + name)
+        run(["git", "clone", "--no-hardlinks", str(project), str(fixture)], work)
+        if filename:
+            path = fixture / EXAMPLE / filename
+            text = path.read_text(encoding="utf-8")
+            if name == "python-fail":
+                text = text.replace("unit_cents, quantity = 125, 3", "unit_cents, quantity = 126, 3")
+            elif name == "missing":
+                text = change + text
+            else:
+                text += change
+            path.write_text(text, encoding="utf-8")
+            run(["git", "add", "."], fixture)
+            run(["git", "-c", "user.name=Test Vault Fixture", "-c", "user.email=fixture@example.invalid",
+                 "-c", "commit.gpgsign=false", "commit", "-qm", name], fixture)
+        run(["bash", "-e", "-c", block], fixture, result=0 if name == "pass" else 1, includes=expected,
+            env={**env, "GITHUB_STEP_SUMMARY": "", "TMPDIR": str(work)})
+        print(f"Verified the copied README command for {name}.")
+
+def verify_sha256_checkout(project, work, command, directory, observation, env):
+    target = work / "sha256"
+    shutil.copytree(project, target, ignore=shutil.ignore_patterns(".git", "__pycache__"))
+    run(["git", "init", "-q", "--object-format=sha256"], target)
+    run(["git", "add", "."], target)
+    run(["git", "-c", "user.name=Test Vault Fixture", "-c", "user.email=fixture@example.invalid",
+         "-c", "commit.gpgsign=false", "commit", "-qm", "SHA-256 fixture"], target)
+    checkout = run(["git", "rev-parse", "HEAD"], target)
+    receipts = work / "sha256-receipts"
+    receipts.mkdir()
+    for path in directory.glob("*.json"):
+        write_json(receipts / path.name, {**json.loads(path.read_bytes()), "checkout_sha": checkout})
+    args = [*command[:4], "--receipts", str(receipts), "--evidence", str(observation)]
+    run(args, target, includes="Overall: PASS", env={**env, "GITHUB_STEP_SUMMARY": ""})
+    node = receipts / "node.json"
+    write_json(node, {**json.loads(node.read_bytes()), "checkout_sha": "0" * 64})
+    run(args, target, result=1, includes="checkout_sha does not match", env={**env, "GITHUB_STEP_SUMMARY": ""})
+
+
 def verify_upgrade(work):
     project = work / "project"
     previous = ROOT / "versions/v0.0.2/starter"
     shutil.copytree(previous, project)
     case_file = project / "test-vault/cases.md"
     old_cases = case_file.read_bytes()
-    old_parts = {path: (project / path).read_bytes() for path in (VALIDATOR, ACTION)}
+    old_workflow = (project / ACTION).read_bytes()
     run(["git", "init", "-qb", "trunk"], project)
     run([sys.executable, str(VALIDATOR)], project, includes="1 unique cases")
     (project / "existing_test.mjs").write_text(
         "import assert from 'node:assert/strict';\nassert.equal(6 * 7, 42);\n", encoding="utf-8",
     )
     run(["node", "--test", "existing_test.mjs"], project, includes="pass 1")
-    for file in ("verify_receipts.py", "source_commit.py", "evidence.md", "UPGRADE.md"):
+    for file in ("verify_receipts.py", "source_commit.py", "validate_catalog.py", "evidence.md", "UPGRADE.md"):
         shutil.copy2(STARTER / "test-vault" / file, project / "test-vault" / file)
     shutil.copytree(STARTER / EXAMPLE, project / EXAMPLE)
     case_file.write_bytes(old_cases.rstrip(b"\n") + b"\n" + CASE_ROW.encode())
-    if any((project / path).read_bytes() != data for path, data in old_parts.items()):
-        raise AssertionError("Opt-in altered the existing catalog validator or workflow")
+    if (project / ACTION).read_bytes() != old_workflow:
+        raise AssertionError("Opt-in altered the existing workflow")
     run([sys.executable, str(VALIDATOR)], project, includes="2 unique cases")
     run(["node", "--test", "existing_test.mjs"], project, includes="pass 1")
     run(["git", "add", "."], project)
@@ -137,13 +212,20 @@ def verify_upgrade(work):
         "--receipts", str(directory), "--evidence", str(observation),
     ]
     suites = [
-        ["node", "--test", str(EXAMPLE / "app.test.mjs")],
+        ["node", str(EXAMPLE / "run-node.mjs")],
         [sys.executable, str(EXAMPLE / "check.py")],
     ]
     statuses = [subprocess.run(suite, cwd=project, env=env, check=False, timeout=75).returncode for suite in suites]
     print(run(command, project, includes="Overall: PASS", env=env))
     if any(statuses):
         raise AssertionError("Every example suite must also exit successfully")
+    hidden = work / "commented-catalog.md"
+    hidden.write_bytes(old_cases + b"\n<!--\n" + (HEADER + DIVIDER + CASE_ROW).encode() + b"-->\n")
+    run([*command, "--catalog", str(hidden)], project, result=1,
+        includes="case ID must be registered", env={**env, "GITHUB_STEP_SUMMARY": ""})
+    verify_readme_block(project, work, env)
+    verify_missing_helpers(project, work, command, directory, observation, env)
+    verify_sha256_checkout(project, work, command, directory, observation, env)
     test_receipts(project, env, command, directory, observation)
     print("Verified v0.0.2 opt-in alongside the existing catalog, workflow, and project test.")
 

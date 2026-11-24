@@ -11,4 +11,6 @@ The [metadata](metadata.json) maps `PYTHON-001` to its runnable example. It decl
 3. Place the test where the project runner discovers it. Update the case path and command when adopting the metadata alongside your test.
 4. Record the actual checkout, runtime, run and job, and result using the [case and receipt form](../../starter/test-vault/case-and-receipt.md).
 
-From the Lydite root, run `python tools/inventory.py --run python` in an environment with Python 3.12 / unittest. The test command uses the language folder as its working directory.
+From the Lydite root, run `python3 tools/inventory.py --run python` in an environment with Python 3.12 / unittest. The test command uses the language folder as its working directory.
+
+The bundled manifest uses `{python}` to reuse the Python interpreter that starts the inventory. On Windows, use `py -3.12` if your Python launcher exposes that spelling.

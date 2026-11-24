@@ -20,7 +20,10 @@ def source_commit(root, inputs=()):
             raise ValueError("commit tracked changes before writing or verifying receipts")
         for path in inputs:
             relative = Path(path).resolve().relative_to(root)
-            git(root, "ls-files", "--error-unmatch", "--", relative.as_posix())
+            try:
+                git(root, "ls-files", "--error-unmatch", "--", f":(literal){relative.as_posix()}")
+            except subprocess.CalledProcessError as error:
+                raise ValueError(f"receipt source must be tracked in the intended Git checkout: {relative}") from error
         return git(root, "rev-parse", "HEAD")
     except (OSError, subprocess.CalledProcessError) as error:
         raise ValueError("receipt source must be tracked in the intended Git checkout") from error

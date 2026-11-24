@@ -6,11 +6,12 @@ import os
 import platform
 import re
 import subprocess
+import sys
 import xml.etree.ElementTree as ET
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 
-from native_outcomes import NATIVE_RUNNERS, passed_tests, selected_outcome, skipped_tests, unittest_command
+from native_outcomes import NATIVE_RUNNERS, UNITTEST_RESULT_FILE, node_command, passed_tests, selected_outcome, skipped_tests, unittest_command
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,13 +26,29 @@ def test_path(folder, name):
     return path.as_posix()
 
 
-def check_files(folder, cases):
+def check_windows_paths(folder, names):
+    seen = {}
+    for name in sorted(names):
+        parts = PurePosixPath(name).parts
+        for index, part in enumerate(parts, 1):
+            if (PureWindowsPath(part).is_reserved() or part.endswith((" ", "."))
+                    or any(char in '<>:"/\\|?*' or ord(char) < 32 for char in part)):
+                raise ValueError(f"{folder.name}: Windows cannot check out fixture path {name!r}")
+            prefix = "/".join(parts[:index])
+            existing = seen.setdefault(prefix.casefold(), prefix)
+            if existing != prefix:
+                raise ValueError(f"{folder.name}: Windows fixture paths collide: {existing!r}, {prefix!r}")
+
+
+def check_files(folder, cases, runner):
     declared = set()
     for case in cases:
         case["test"] = test_path(folder, case["test"])
         case["support"] = [test_path(folder, name) for name in case["support"]]
         declared.update([case["test"], *case["support"]])
 
+    if runner == "windows-latest":
+        check_windows_paths(folder, declared)
     tests = folder / "tests"
     boundary = folder.resolve() / "tests"
     if tests.is_symlink() or tests.resolve() != boundary:
@@ -76,6 +93,11 @@ def nonblank(value):
     return isinstance(value, str) and bool(value.strip()) and "\x00" not in value
 
 
+def valid_node_selector(selector):
+    names = selector if isinstance(selector, list) else [selector]
+    return bool(names) and all(isinstance(name, str) and bool(name) and "\\x00" not in name for name in names)
+
+
 def argument_list(value):
     return (
         isinstance(value, list) and bool(value) and nonblank(value[0])
@@ -92,6 +114,8 @@ DIRECT_ASSERTIONS = {
 
 
 def executable(value):
+    if value == "{python}":
+        return "python"
     return PurePosixPath(value.replace("\\", "/")).name.lower().removesuffix(".exe")
 
 
@@ -192,8 +216,9 @@ def read_manifest(folder, seen):
             native = case["native_runner"]
             if not nonblank(native) or native not in NATIVE_RUNNERS:
                 raise ValueError(f"{case_id}: unknown native_runner {native!r}")
-        if "native_runner" in case and not nonblank(case.get("native_test")):
-            raise ValueError(f"{case_id}: native_runner requires a named native_test")
+            validate_name = valid_node_selector if native == "node-tap" else nonblank
+            if not validate_name(case.get("native_test")):
+                raise ValueError(f"{case_id}: native_runner requires a named native_test")
         if "native_test" in case and "native_runner" not in case:
             raise ValueError(f"{case_id}: native_test requires a native_runner")
         for field, requires_native in (("native_command_index", True), ("assertion_command_index", False)):
@@ -202,19 +227,38 @@ def read_manifest(folder, seen):
                 if ("native_runner" in case) != requires_native or type(stage) is not int or not 0 <= stage < len(commands):
                     raise ValueError(f"{case_id}: invalid {field} for this runner or command list")
         seen.add(case_id)
-    check_files(folder, cases)
+    check_files(folder, cases, manifest["runner"])
     for case in cases:
         if not test_invocation(folder, case):
             raise ValueError(f"{case['id']}: command stages do not bind to declared test {case['test']}")
     return manifest
 
 
-def read_inventory(directory):
+def has_vault_declaration(folder):
+    if (folder / "GUIDE.md").is_file() and (folder / "tests").is_dir():
+        return True
+    metadata = folder / "metadata.json"
+    if metadata.is_symlink() or not metadata.is_file():
+        return False
+    try:
+        declaration = json.loads(metadata.read_text(encoding="utf-8"))
+    except (OSError, ValueError, RecursionError):
+        return False
+    return isinstance(declaration, dict) and {"language", "runtime", "runner", "cases"} <= declaration.keys()
+
+
+def read_inventory(directory, *, selected=None):
+    if directory.is_symlink():
+        raise ValueError(f"{directory}: inventory root must be a real directory")
     inventory = {}
     seen = set()
     for folder in sorted(directory.iterdir()):
         if not folder.is_dir():
             continue
+        if folder.name != selected and not has_vault_declaration(folder):
+            continue
+        if folder.is_symlink() or folder.resolve() != directory.resolve() / folder.name:
+            raise ValueError(f"{folder}: language root must stay inside the inventory")
         try:
             inventory[folder.name] = read_manifest(folder, seen)
         except (OSError, ValueError, RecursionError) as error:
@@ -230,7 +274,11 @@ def print_inventory(inventory):
     for manifest in inventory.values():
         cases = manifest["cases"]
         test_files = len({case["test"] for case in cases})
-        print(f'| {manifest["language"]} | {manifest["runtime"]} | {len(cases)} | {test_files} | {manifest["runner"]} |')
+        language, runtime = (
+            " ".join(manifest[key].split()).replace("\\", "&#92;").replace("|", r"\|")
+            for key in ("language", "runtime")
+        )
+        print(f'| {language} | {runtime} | {len(cases)} | {test_files} | {manifest["runner"]} |')
     print(f'\n{sum(len(m["cases"]) for m in inventory.values())} declared cases in {len(inventory)} language folders.')
 
 
@@ -262,14 +310,23 @@ def execute_case(case, folder, env, *, timeout=180, guard=None, command_results=
     native_output = ""
     commands = case["commands"]
     native_index = case.get("native_command_index", len(commands) - 1)
+    native_runner = case.get("native_runner")
     with TemporaryDirectory(prefix="lydite-") as temp:
+        result_file = Path(temp) / "native-result.json"
         for index, argv in enumerate(commands):
             if guard:
                 guard()
             command = [arg.replace("{tmp}", temp) for arg in argv]
-            if case.get("native_runner") == "unittest" and index == native_index:
-                command = unittest_command(command)
-            status, reason, exit_code, output = command_status(command, folder, env, timeout)
+            if command[0] == "{python}":
+                command[0] = sys.executable
+            command_env = env
+            if index == native_index:
+                if native_runner == "unittest":
+                    command = unittest_command(command)
+                    command_env = {**env, UNITTEST_RESULT_FILE: str(result_file)}
+                elif native_runner == "node-tap":
+                    command = node_command(command, result_file)
+            status, reason, exit_code, output = command_status(command, folder, command_env, timeout)
             if command_results is not None:
                 command_results[index].update(outcome=status, detail=reason, exit_code=exit_code)
             if guard:
@@ -277,7 +334,13 @@ def execute_case(case, folder, env, *, timeout=180, guard=None, command_results=
             if status != "PASS":
                 return status, reason
             if index == native_index:
-                native_output = output
+                if native_runner in {"node-tap", "unittest"}:
+                    try:
+                        native_output = result_file.read_text(encoding="utf-8")
+                    except (OSError, UnicodeError):
+                        return "FAIL", f"{native_runner} did not provide a structured test result"
+                else:
+                    native_output = output
     if native := case.get("native_runner"):
         try:
             if name := case.get("native_test"):
@@ -299,6 +362,8 @@ def execute_case(case, folder, env, *, timeout=180, guard=None, command_results=
 def runtime_version(probe, folder, env):
     if not probe:
         return None
+    if probe[0] == "{python}":
+        probe = [sys.executable, *probe[1:]]
     try:
         result = subprocess.run(
             probe, cwd=folder, env=env, timeout=20, capture_output=True,
@@ -330,11 +395,22 @@ def checkout_identity(root):
 
 def report_destination(path):
     destination = path.resolve()
-    inputs = ((ROOT / name).resolve() for name in ("languages", "tools"))
-    if destination.is_relative_to((ROOT / ".git").resolve()) or (
-        destination.exists() and any(destination.is_relative_to(prefix) for prefix in inputs)
-    ):
+    inputs = {(ROOT / name).resolve() for name in ("languages", "tools", ".git")}
+    for kind in ("--git-dir", "--git-common-dir"):
+        try:
+            directory = subprocess.check_output(
+                ["git", "-C", str(ROOT), "rev-parse", "--path-format=absolute", kind],
+                text=True, stderr=subprocess.DEVNULL,
+            ).removesuffix("\n")
+        except (OSError, subprocess.CalledProcessError):
+            continue
+        inputs.add(Path(directory).resolve())
+    if any(destination.is_relative_to(prefix) for prefix in inputs):
         raise ValueError("evidence destination points inside project inputs")
+    if destination.is_dir() or any(parent.exists() and not parent.is_dir() for parent in destination.parents):
+        raise ValueError("evidence destination requires a filename with a directory parent")
+    if destination.exists() and not destination.is_file():
+        raise ValueError("evidence destination must be a regular file")
     try:
         tracked = subprocess.check_output(
             ["git", "-C", str(ROOT), "ls-files", "-z"], stderr=subprocess.DEVNULL,
@@ -440,11 +516,15 @@ def main():
     group.add_argument("--run", metavar="LANGUAGE", help="execute one language folder")
     group.add_argument("--runner", choices=sorted(RUNNERS), help="execute every case assigned to the specified runner")
     parser.add_argument("--evidence", type=Path, help="write a JSON report for a case run")
+    parser.add_argument("--require-upstream", action="store_true", help="require Lydite's official case inventory")
     args = parser.parse_args()
     if args.evidence and not (args.run or args.runner):
         parser.error("--evidence requires --run or --runner")
     try:
-        inventory = read_inventory(ROOT / "languages")
+        inventory = read_inventory(ROOT / "languages", selected=args.run)
+        if args.require_upstream:
+            from validation_contract import validate_inventory
+            validate_inventory(inventory)
         if args.run:
             if args.run not in inventory:
                 raise ValueError(f"Unknown language folder: {args.run}")
