@@ -31,3 +31,7 @@ Use [Veraphify v0.0.9 at `ed56500`](https://github.com/vixttha/Veraphify/commit/
 The public adoption check archives a pinned Lydite checkout and verifies the inventory implementation citation. Lydite's release and language suites have their own version and evidence.
 
 The [public workflow](.github/workflows/veraphify-adoption.yml) checks the source pin, runs the Graphify MCP check, compares the archive SHA-256, and verifies the citation against the exact Git blob. The disposable archive version `v0.0.0.1` identifies the probe. Each public run retains a small receipt with the adopter SHA, Veraphify SHA, and citation.
+
+## Engineering ecosystem
+
+[Owner-approved six architectural laws](ENGINEERING-LAWS.md) apply to this product. Standalone operation and owner authority remain unchanged. The product has no mandatory coordination-tool dependency.
