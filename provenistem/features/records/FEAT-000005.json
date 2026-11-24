@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "id": "FEAT-000005",
+  "title": "Shared check-plan identity",
+  "summary": "v0.0.4 binds v2 shared receipts to the selected case plan and accepts matching legacy v1 receipts under the documented rules.",
+  "kind": "capability",
+  "lifecycle_status": "verified",
+  "implementation_status": "implemented",
+  "idea_ids": [
+    "IDEA-000002"
+  ],
+  "acceptance_criteria": [
+    "Reject a changed required check set",
+    "Document and verify backward compatibility"
+  ],
+  "testing": {
+    "status": "tested",
+    "outcome": "pass",
+    "refs": [
+      "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44506598515/job/135499713793"
+    ]
+  },
+  "evidence": [
+    {
+      "kind": "test",
+      "claim": "The install rehearsal rejected a changed case plan and verified matching legacy v1 receipts.",
+      "source_sha": "87d25d80d3154d295052412b64b29a0f0f152c27",
+      "source_path": "starter/test-vault/verify_receipts.py",
+      "receipt": "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44506598515/job/135499713793"
+    }
+  ],
+  "release_membership": "NOT_ASSERTED"
+}

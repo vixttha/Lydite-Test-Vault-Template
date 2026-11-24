@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "id": "FEAT-000007",
+  "title": "Strict shared observation decoding",
+  "summary": "The Python and Node shared-evidence examples in v0.0.4 reject duplicate keys in observation JSON and preserve the original evidence bytes in failing receipts.",
+  "kind": "capability",
+  "lifecycle_status": "verified",
+  "implementation_status": "implemented",
+  "idea_ids": [
+    "IDEA-000004"
+  ],
+  "acceptance_criteria": [
+    "Reject an observation containing repeated keys",
+    "Preserve the valid shared-evidence rehearsal"
+  ],
+  "testing": {
+    "status": "tested",
+    "outcome": "pass",
+    "refs": [
+      "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44506598515/job/135499713793"
+    ]
+  },
+  "evidence": [
+    {
+      "kind": "test",
+      "claim": "The install rehearsal accepted the valid shared observation and rejected the duplicate-key observation.",
+      "source_sha": "87d25d80d3154d295052412b64b29a0f0f152c27",
+      "source_path": "starter/test-vault/examples/shared-evidence/check.py",
+      "receipt": "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44506598515/job/135499713793"
+    },
+    {
+      "kind": "test",
+      "claim": "The companion Node assertion also rejected the duplicate-key observation in the same rehearsal.",
+      "source_sha": "87d25d80d3154d295052412b64b29a0f0f152c27",
+      "source_path": "starter/test-vault/examples/shared-evidence/app.test.mjs",
+      "receipt": "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44506598515/job/135499713793"
+    }
+  ],
+  "release_membership": "NOT_ASSERTED"
+}

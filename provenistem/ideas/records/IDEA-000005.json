@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "id": "IDEA-000005",
+  "title": "Check pinned archive file modes",
+  "summary": "Compare Git file modes as well as blob contents so executable-bit drift cannot pass archival checks.",
+  "kind": "architecture",
+  "origin": {
+    "created_by": "imported",
+    "source": "https://github.com/vixttha/Lydite-Test-Vault-Template/issues/17"
+  },
+  "lifecycle_status": "adopted",
+  "implementation_status": "implemented",
+  "testing": {
+    "status": "tested",
+    "outcome": "pass",
+    "refs": [
+      "https://github.com/vixttha/Lydite-Test-Vault-Template/actions/runs/44506598515/job/135499713772"
+    ]
+  },
+  "importance": "medium",
+  "complexity": "low",
+  "categories": [
+    "graphify",
+    "archives"
+  ],
+  "benefits": [
+    "Preserves the full pinned Git record"
+  ],
+  "risks": [
+    "The check should use Git’s index so the result is not host filesystem dependent"
+  ],
+  "related_ideas": [],
+  "evidence": [
+    {
+      "relation": "context",
+      "claim": "Before the v0.0.4 release: Draft PR #32 implements and exercises a mode-only archive drift regression.",
+      "repository": "vixttha/Lydite-Test-Vault-Template",
+      "commit": "3b266281c90380ab982307ee5210e701ce4611f4",
+      "path": "tools/graphify/version_maps.py"
+    },
+    {
+      "relation": "supports",
+      "claim": "v0.0.4 compares historical archive Git modes and blob contents with the pinned upstream trees and verifies the rebuilt Graphify maps.",
+      "repository": "vixttha/Lydite-Test-Vault-Template",
+      "commit": "87d25d80d3154d295052412b64b29a0f0f152c27",
+      "path": "tools/graphify/version_maps.py"
+    }
+  ],
+  "decision": {
+    "decided_by": "owner",
+    "decided_at": "2026-11-19T10:42:14Z",
+    "reason": "Included in the owner-approved publication of Lydite v0.0.4. https://github.com/vixttha/Lydite-Test-Vault-Template/releases/tag/v0.0.4"
+  }
+}
