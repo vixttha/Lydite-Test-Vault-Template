@@ -51,3 +51,18 @@ The included workflow runs on pull requests and merge queues on standard hosted 
 Public repositories use standard hosted compute. Private repositories skip by default. A maintainer can set repository Actions variable `TEST_VAULT_ENABLE_PRIVATE=true` after verifying the runner allowance and budget. For a required check, first enable the job for your repository visibility. Then select **Test Vault catalog** after a successful validation run. If the repo uses a merge queue, verify the check also reports on `merge_group`. Keep the required workflow free of path restrictions. Teams using a different runner policy can use the local command or adapt the runner configuration in their own repository.
 
 For a new repository, initialize it and copy this kit. A maintainer of a dedicated GitHub template repository can keep these files on its default branch for GitHub's **Use this template** flow.
+
+## Owner-approved engineering ecosystem laws
+
+Decision ENGINEERING-ECOSYSTEM-LAWS-001 (2026-11-24). Mission: Build a toolkit that gives compatible LLM agents a structured engineering environment, rather than building another AI model.
+
+<!-- engineering-laws:start -->
+1. **Independence:** Every tool must remain independently installable, usable, versioned and maintained.
+2. **Composability:** Installing additional tools expands the agent's capabilities without creating mandatory dependencies.
+3. **Portability:** No mandatory AI provider, model, agent harness or paid execution service.
+4. **Persistence:** Project knowledge, decisions, progress and evidence survive the termination of an AI session.
+5. **Verification:** Development claims must be supported by reproducible, revision-bound evidence.
+6. **Owner authority:** The human retains control over scope, architectural decisions, integration and releases.
+<!-- engineering-laws:end -->
+
+Remain standalone. Other tools are optional; their absence must not block normal operation. Preserve project-local authority and evidence; never automatically install, merge, synchronize or write to another tool's branch. No mandatory seventh coordinator, paid service or AI provider. Existing product scope remains authoritative. Change these laws only by explicit owner approval.
